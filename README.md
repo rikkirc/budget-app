@@ -27,7 +27,7 @@ npm run tauri build
 
 ## Your data
 
-When you unlock a vault, the app creates `<profile_name>_finance_data.db` in `src-tauri/`. These files hold your personal financial data and are excluded from git by `.gitignore`. Back them up separately and never commit them.
+When you unlock a vault, the app creates `<profile_name>_finance_data.db` in `Documents\FinancialCommandCenter\`. These files hold your personal financial data and live outside the repo, so back that folder up separately. `.gitignore` also excludes any stray `*.db` files so they are never committed.
 
 ## Recommended IDE setup
 
