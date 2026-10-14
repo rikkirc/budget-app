@@ -508,6 +508,13 @@ fn get_sinking_fund_info_impl(conn: &Connection, bill_id: i32) -> SinkingFundInf
         let bill_loan_id: i32 = row.get(1).unwrap_or(0);
         let series_id: i32 = row.get(2).unwrap_or(0);
 
+        // Only Sinking Fund loans save their 1st Half to a fund. A True Bi-Monthly 1st Half is a real payment, not a fund.
+        // (Split recurring bills have no loan and are always Sinking Fund, same default pay_bill uses.)
+        let due_structure: String = conn.query_row("SELECT due_structure FROM loans WHERE id = ?1", params![bill_loan_id], |r| r.get(0)).unwrap_or_else(|_| "Sinking Fund".to_string());
+        if due_structure != "Sinking Fund" {
+            return SinkingFundInfo { found: false, account_id: 0, account_name: "".to_string(), amount: 0.0 };
+        }
+
         // Match by loan_id + series_id (never confused by similar names) + the exact 15-day relationship
         let result = conn.query_row(
             "SELECT pb.account_id, a.name, pb.amount FROM paid_bills pb
@@ -1011,6 +1018,46 @@ mod tests {
         assert_eq!(cents(balance_of(&conn, savings)), 0, "the fund was fully used");
         let completed: i32 = conn.query_row("SELECT COUNT(*) FROM completed_loans WHERE original_id = 7", [], |r| r.get(0)).unwrap();
         assert_eq!(completed, 1, "loan paid off exactly and graduated");
+    }
+
+    fn add_loan_with_halves(conn: &Connection, id: i32, name: &str, due_structure: &str) {
+        conn.execute("INSERT INTO loans (id, name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure) VALUES (?1, ?2, 6000, 6000, 3, 'Months', 'Bi-Monthly', 2000, '2026-11-20', '', 6000, ?3)", params![id, name, due_structure]).unwrap();
+        conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id) VALUES (?1, 1000, '2026-11-05', '2026-10-15', ?2)", params![format!("{} (1st Half)", name), id]).unwrap();
+        conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id) VALUES (?1, 1000, '2026-11-20', '2026-10-31', ?2)", params![format!("{} (2nd Half (Due))", name), id]).unwrap();
+    }
+
+    #[test]
+    fn true_bimonthly_second_half_is_not_offered_a_sinking_fund() {
+        let conn = test_db();
+        let bank = fund_account(&conn, "Bank", 10000.0);
+        add_loan_with_halves(&conn, 3, "BILLEASE", "True Bi-Monthly");
+
+        // Both halves of a True Bi-Monthly loan are real payments: pay the 1st Half normally
+        let first = bill_id_named(&conn, "BILLEASE (1st Half)", "2026-11-05");
+        pay_bill_impl(&conn, first, bank, 1000.0, "Paid: BILLEASE (1st Half)");
+
+        let second = bill_id_named(&conn, "BILLEASE (2nd Half (Due))", "2026-11-20");
+        assert!(!get_sinking_fund_info_impl(&conn, second).found, "a paid True Bi-Monthly 1st Half is not a sinking fund");
+
+        // And paying the 2nd Half charges only its own amount
+        pay_bill_impl(&conn, second, bank, 1000.0, "Paid: BILLEASE (2nd Half (Due))");
+        assert_eq!(balance_of(&conn, bank), 8000.0);
+    }
+
+    #[test]
+    fn sinking_fund_second_half_still_finds_its_fund() {
+        let conn = test_db();
+        let bank = fund_account(&conn, "Bank", 10000.0);
+        let savings = fund_account(&conn, "Savings", 0.0);
+        add_loan_with_halves(&conn, 4, "SLOAN", "Sinking Fund");
+
+        let first = bill_id_named(&conn, "SLOAN (1st Half)", "2026-11-05");
+        fund_bill_to_savings_impl(&conn, first, bank, savings, 1000.0, "Funded to Savings: SLOAN (1st Half)");
+
+        let second = bill_id_named(&conn, "SLOAN (2nd Half (Due))", "2026-11-20");
+        let info = get_sinking_fund_info_impl(&conn, second);
+        assert!(info.found);
+        assert_eq!((info.account_id, info.amount), (savings, 1000.0));
     }
 
     #[test]
