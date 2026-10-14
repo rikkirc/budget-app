@@ -17,12 +17,16 @@ let profile = "";
 function readStorage(key) { try { return localStorage.getItem(key); } catch { return null; } }
 function writeStorage(key, value) { try { value === null ? localStorage.removeItem(key) : localStorage.setItem(key, value); } catch { /* not fatal */ } }
 
-export function getSyncSettings() {
-  try { const s = JSON.parse(readStorage(SYNC_KEY)); return s?.url && s?.token ? s : null; } catch { return null; }
-}
-export function saveSyncSettings(settings) {
-  writeStorage(SYNC_KEY, settings ? JSON.stringify({ url: normalizeUrl(settings.url), token: settings.token.trim() }) : null);
-}
+// Saved as { url, email, token }. Signing out keeps the server address and email so signing back in is quick.
+function readSaved() { try { return JSON.parse(readStorage(SYNC_KEY)) || null; } catch { return null; } }
+
+/** The signed-in account ({ url, email, token }), or null when this device isn't syncing */
+export function getSyncSettings() { const s = readSaved(); return s?.url && s?.token ? s : null; }
+/** The last server address and email used on this device, to pre-fill the sign-in form */
+export function getLastServer() { const s = readSaved(); return { url: s?.url ?? "", email: s?.email ?? "" }; }
+
+function saveSession(url, email, token) { writeStorage(SYNC_KEY, JSON.stringify({ url: normalizeUrl(url), email, token })); }
+function forgetSession() { const s = readSaved(); writeStorage(SYNC_KEY, s?.url ? JSON.stringify({ url: s.url, email: s.email }) : null); }
 export function normalizeUrl(url) {
   let u = url.trim().replace(/\/+$/, "");
   if (u && !/^https?:\/\//i.test(u)) u = `https://${u}`;
@@ -35,10 +39,15 @@ export const profileKey = (name) => name.toLowerCase().replaceAll(" ", "_");
 async function request(settings, method, path, body, isJson = true) {
   const res = await fetch(`${settings.url}${path}`, {
     method,
-    headers: { Authorization: `Bearer ${settings.token}`, ...(isJson && body !== undefined ? { "Content-Type": "application/json" } : {}) },
+    headers: { ...(settings.token ? { Authorization: `Bearer ${settings.token}` } : {}), ...(isJson && body !== undefined ? { "Content-Type": "application/json" } : {}) },
     body: body === undefined ? undefined : isJson ? JSON.stringify(body) : body,
   });
   const data = await res.json().catch(() => ({}));
+  // The session was ended (signed out everywhere, password reset, or unused for months): send the app to sign-in
+  if (res.status === 401 && settings.token) {
+    forgetSession();
+    window.dispatchEvent(new Event("vault:signed-out"));
+  }
   if (!res.ok) throw Object.assign(new Error(data.error || `ERROR: The sync server answered ${res.status}`), { status: res.status });
   return data.result;
 }
@@ -86,16 +95,30 @@ export async function invoke(cmd, args = {}) {
   }
 }
 
-/** Checks the address and token before switching this device over to sync */
-export async function testConnection(settings) {
-  await request({ url: normalizeUrl(settings.url), token: settings.token.trim() }, "GET", "/api/ping");
+// ---- Family accounts ----
+// Each returns { email, token } (plus recoveryCode after sign-up or a reset) and leaves this device signed in.
+
+async function startSession(url, path, body) {
+  const result = await request({ url: normalizeUrl(url), token: "" }, "POST", path, body);
+  saveSession(url, result.email, result.token);
+  return result;
+}
+export const signUp = (url, email, password, inviteCode) => startSession(url, "/api/sign-up", { email, password, inviteCode });
+export const signIn = (url, email, password) => startSession(url, "/api/sign-in", { email, password });
+export const resetPassword = (url, email, recoveryCode, newPassword) => startSession(url, "/api/reset-password", { email, recoveryCode, newPassword });
+
+/** Signs this device out (or every device, with everywhere=true). This device forgets its session even if the server can't be reached. */
+export async function signOut(everywhere = false) {
+  const sync = getSyncSettings();
+  if (sync) { try { await request(sync, "POST", everywhere ? "/api/sign-out-everywhere" : "/api/sign-out", {}); } catch { /* still sign out here */ } }
+  forgetSession();
 }
 
-/** Desktop only: copies this computer's unlocked vault up to the server. replace=false refuses to overwrite server data. */
-export async function uploadLocalVault(settings, profileName, replace) {
+/** Desktop only: copies this computer's unlocked vault up to your account. replace=false refuses to overwrite server data. */
+export async function uploadLocalVault(profileName, replace) {
   const bytes = await tauriInvoke("export_vault");
   const query = `?clientId=${encodeURIComponent(CLIENT_ID)}${replace ? "&replace=true" : ""}`;
-  return request({ url: normalizeUrl(settings.url), token: settings.token.trim() }, "PUT", `/api/vault/${encodeURIComponent(profileName)}${query}`, bytes, false);
+  return request(getSyncSettings(), "PUT", `/api/vault/${encodeURIComponent(profileName)}${query}`, bytes, false);
 }
 
 /**

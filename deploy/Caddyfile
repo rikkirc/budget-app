@@ -1,0 +1,4 @@
+# Caddy serves Vault over HTTPS at your domain (e.g. our-vault.duckdns.org) and forwards requests to the server
+{$VAULT_DOMAIN} {
+	reverse_proxy vault:8080
+}

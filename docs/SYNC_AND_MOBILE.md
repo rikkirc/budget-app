@@ -1,142 +1,236 @@
-# Vault on your phone: sync setup
+# Vault on your phone: family accounts and sync
 
-Vault can keep your desktop and your phone on the same data in real time. When you pay a bill on your phone, the
-desktop shows it within a second, and the other way round.
+Vault can keep each family member's phone and computer on the same data in real time. Pay a bill on your phone and
+your desktop shows it within a second, and the other way round.
 
 ## How it works
 
 ```
-  Desktop app  ──┐                          ┌──  Phone app (Android, iOS later)
-                 ├──►  Vault sync server  ◄──┤
-  (any PC)     ──┘    (always online, holds   └──  (any phone)
-                       the one shared copy)
+  Juan's PC ─┐                                      ┌─ Juan's phone
+             ├──►  Vault sync server (free Oracle  ◄──┤
+  Maria's PC ┘     Cloud computer, always online)    └─ Maria's phone
 ```
 
-- The **sync server** is a small program you run on a server you control. It keeps the shared copy of your vaults
-  and runs every command (pay bill, transfer, undo…) with exactly the same logic as the desktop app.
-- Every device connects with the server's **address** and a **sync token** (a password you choose).
-- When one device changes something, the server tells all the others over a live connection, and their screens
-  reload. If you're halfway through typing, the app shows *"Your vault was updated on another device"* instead,
-  so your form isn't wiped.
+- **One server for the whole family**, running on a free Oracle Cloud computer. You set it up once.
+- **Everyone makes their own account** with an email, a password and the **family invite code** you choose.
+  You never have to create accounts for anyone. Strangers who find the server can't sign up without the code.
+- **Each account is private.** Juan can't see Maria's vaults, even if they both use the same profile name.
+- **Forgot a password?** At sign-up, everyone gets a **recovery code** to write down. It resets their password
+  without email and without asking you.
+- **Live updates:** when you change something, your other signed-in devices refresh right away. If you're halfway
+  through typing, the app shows *"Your vault was updated on another device"* instead, so your form isn't wiped.
 - **Offline:** each device keeps the last data it loaded, so you can still look at your balances and bills with no
   signal. Changes need a connection. Vault tells you when a change couldn't reach the server, and never quietly
   retries it, so a payment can't be recorded twice.
-- **"This computer only"** still works exactly as before. Sync is optional, and you can turn it off any time.
+- **"This computer only"** still works exactly as before. Signing in is optional on the desktop.
 
-## Step 1: Run the sync server
+---
 
-You need the server running somewhere that is always on. Pick **one** of these:
+## Part 1: Set up the server (once, by one person, about 1 hour)
 
-### Option A: Fly.io (recommended, about US$2–5/month)
+Everything below is free. You need a credit or debit card for Oracle's identity check; Always Free resources are
+not charged.
 
-1. Install `flyctl` from https://fly.io/docs/flyctl/install/ and sign up with `fly auth signup`.
-2. In `fly.toml`, change `app = "CHANGE-ME-vault-sync"` to a unique name, e.g. `juan-vault-sync`.
-3. From the repository folder, run:
+### 1. Create the free Oracle Cloud computer
 
-   ```bash
-   fly launch --copy-config --no-deploy
-   fly volumes create vault_data --size 1 --region sin
-   fly secrets set VAULT_TOKEN="paste-a-long-random-password-here"
-   fly deploy
-   ```
+1. Sign up at https://www.oracle.com/cloud/free/. When asked for a **Home Region**, choose **Singapore**. It's
+   closest to the Philippines, and you can't change it later.
+2. In the Oracle Cloud console, go to **Compute → Instances → Create instance**:
+   - **Image:** Canonical **Ubuntu** (22.04 or 24.04).
+   - **Shape:** **Ampere VM.Standard.A1.Flex** with 1 OCPU and 6 GB memory. It's labelled *Always Free-eligible*.
+     If Oracle says it's *out of capacity*, try again later, or pick **VM.Standard.E2.1.Micro** (also free; see
+     the note in step 4).
+   - **SSH keys:** choose *Generate a key pair* and **download the private key**. You need it to log in.
+3. Click **Create**. When it's running, copy its **Public IP address**.
+4. Open the web ports. On the instance page, click the **subnet**, then its **Default Security List**, then
+   **Add Ingress Rules**:
+   - Source CIDR `0.0.0.0/0`, IP protocol TCP, destination port **80**
+   - Source CIDR `0.0.0.0/0`, IP protocol TCP, destination port **443**
 
-   Make up a long random sync token (a password manager can generate one) and save it there. Fly.io never shows it
-   again, and you'll type it into each device.
-4. Your server address is `https://<your-app-name>.fly.dev`. Open `https://<your-app-name>.fly.dev/health` in a
-   browser: it should say `ok`.
+### 2. Get a free web address (DuckDNS)
 
-### Option B: Any Linux server or VPS with Docker
+1. Go to https://www.duckdns.org and sign in (Google or GitHub works).
+2. Add a subdomain, e.g. `delacruz-vault`, and set its **current ip** to your instance's public IP.
+3. Your server address is now `https://delacruz-vault.duckdns.org`.
+
+### 3. Log in to the server and install Docker
+
+From your PC, in a terminal (PowerShell on Windows), log in with the key you downloaded:
 
 ```bash
-docker build -f server/Dockerfile -t vault-server .
-docker run -d --name vault-server --restart unless-stopped \
-  -e VAULT_TOKEN="a-long-random-password" \
-  -v vault-data:/data -p 8080:8080 vault-server
+ssh -i path/to/ssh-key.key ubuntu@YOUR_PUBLIC_IP
 ```
 
-Put it behind HTTPS (for example with Caddy or a Cloudflare Tunnel). **The phone app only connects over `https://`.**
+Then, on the server:
 
-### Server settings
+```bash
+# Oracle's Ubuntu images block web traffic with their own firewall, so let ports 80 and 443 through
+sudo iptables -I INPUT 6 -p tcp -m multiport --dports 80,443 -j ACCEPT
+sudo netfilter-persistent save
 
-| Variable         | Meaning                                                        |
-|------------------|----------------------------------------------------------------|
-| `VAULT_TOKEN`    | Required. The sync token every device must use (16+ characters). |
-| `VAULT_DATA_DIR` | Folder for the vault files (default `data`, `/data` in Docker). |
-| `PORT`           | Port to listen on (default `8080`).                             |
+# Install Docker, git and sqlite3 (for backups)
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker ubuntu
+sudo apt-get install -y git sqlite3
+exit
+```
 
-## Step 2: Connect the desktop app
+Log in again with the same `ssh` command, so the Docker permission takes effect.
 
-1. Open Vault and unlock your vault as usual.
-2. Click **💻 Local only** in the top bar (it opens **☁️ Sync**).
-3. Enter the server address and your sync token, then click **🔗 Connect**.
-4. Vault asks whether to **upload this computer's vault** to the server. Click **OK** the first time, so the server
-   starts with all your existing accounts, bills and loans.
-   - If the server already has data for that profile, Vault asks whether to replace it or use the server's copy.
-     It never overwrites without asking.
-5. The button now shows **🟢 Live sync**.
+> **Using the E2.1.Micro shape (1 GB memory)?** Building the server needs more memory than that, so add swap
+> first: `sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile`
 
-## Step 3: Install the phone app
+### 4. Start Vault
 
-### Android
+```bash
+git clone https://github.com/rikkirc/budget-app.git
+cd budget-app/deploy
+cp .env.example .env
+nano .env
+```
 
-1. On GitHub, open the repository's **Actions** tab, then the **Android app** workflow, then the latest successful run.
+Your repository is private, so `git clone` asks for your GitHub username and a **personal access token** in place
+of a password. Create one at https://github.com/settings/tokens with read access to the repository.
+
+In `.env`, set:
+
+- `VAULT_DOMAIN`: your DuckDNS address, without `https://` (e.g. `delacruz-vault.duckdns.org`)
+- `VAULT_INVITE_CODE`: make up a family code, at least 8 characters (e.g. `adobo-sinigang-2026`)
+
+Save with **Ctrl+O**, **Enter**, then **Ctrl+X**. Then start everything:
+
+```bash
+docker compose up -d --build
+```
+
+The first build takes about 5–10 minutes. When it's done, open `https://delacruz-vault.duckdns.org/health` in a
+browser. It should say `ok`. The HTTPS certificate is created and renewed automatically.
+
+### 5. Turn on daily backups
+
+```bash
+crontab -e
+```
+
+Add this line, then save:
+
+```
+0 3 * * * /home/ubuntu/budget-app/deploy/backup.sh >> /home/ubuntu/backup.log 2>&1
+```
+
+Every night at 3 AM this copies all accounts and vaults into `deploy/backups/<date>/` and keeps the last 30 days.
+Now and then, also copy the backups **off** the server to your PC:
+
+```bash
+scp -i path/to/ssh-key.key -r ubuntu@YOUR_PUBLIC_IP:budget-app/deploy/backups ./vault-backups
+```
+
+> **Why copy backups off the server?** Oracle may reclaim Always Free computers that sit almost idle for a long
+> time, and a family budget app is very idle. A copy on your PC means you never depend on the server alone.
+
+### 6. Send your family the details
+
+Give each family member:
+
+1. The **Android app** (see Part 2)
+2. The **server address**, e.g. `https://delacruz-vault.duckdns.org`
+3. The **family invite code**
+
+That's it: they create their own accounts.
+
+### Updating the server later
+
+```bash
+cd ~/budget-app && git pull && cd deploy && docker compose up -d --build
+```
+
+---
+
+## Part 2: Install the app
+
+### Android phone
+
+1. On GitHub, open the repository's **Actions** tab, then the **Android app** workflow, then the latest
+   successful run.
 2. Download **vault-android-apk** from *Artifacts* and unzip it to get the `.apk` file.
-3. Copy it to your phone and open it. Allow *Install unknown apps* when Android asks.
-4. Open Vault, enter the **same server address and sync token**, then unlock with the **same profile name** you use
-   on the desktop.
-
-To build it yourself instead, install Android Studio and the NDK (see
-https://v2.tauri.app/start/prerequisites/#android), then run `npm run tauri android init` once and
-`npm run tauri android build --apk`.
+3. Copy it to the phone and open it. Allow *Install unknown apps* when Android asks.
 
 ### iOS (later)
 
-The app is already set up for iOS as well. Building it needs a Mac with Xcode and an Apple Developer account
+The app is already set up for iOS. Building it needs a Mac with Xcode and an Apple Developer account
 (US$99/year): `npm run tauri ios init`, then `npm run tauri ios build`.
 
-## Backups
+## Part 3: Create your account (each family member)
 
-Your vault now lives on the server, so back it up from there. Download a complete copy any time:
+1. Open Vault. On the phone, the account screen appears first. On the desktop, unlock your vault first if you
+   already use Vault there, then click **💻 Local only** in the top bar.
+2. Choose **Create an account**. Enter the server address, your email, a password (at least 8 characters) and
+   the family invite code.
+3. **Write down your recovery code** and keep it safe. It's the only way back in if you forget your password.
+4. **On a desktop that already has your data:** Vault offers to upload this computer's vault. Click **OK** so your
+   phone starts with all your accounts, bills and loans. It never overwrites data already in your account without
+   asking.
+5. Unlock with your profile name, e.g. `Juan Dela Cruz`. Use the **same profile name** on every device.
+6. On your other devices, choose **I already have an account** and sign in with the same email and password.
 
-```bash
-curl -H "Authorization: Bearer YOUR_TOKEN" -o juan_backup.db \
-  "https://<your-app-name>.fly.dev/api/vault/Juan%20Dela%20Cruz"
-```
+The top bar shows **🟢 Live sync** when changes are flowing, or **🟠 Reconnecting…** if the connection dropped
+(Vault reconnects by itself).
 
-The file is a normal Vault database. Keep a few dated copies somewhere safe.
+### Forgot your password?
 
-## Turning sync off
+On the sign-in screen, tap **Forgot password?**, then enter your email, your recovery code and a new password.
+You get a **new** recovery code (the old one stops working), and you're signed out on your other devices.
 
-Click **🟢 Live sync**, then **Turn off sync**. The desktop goes back to its own vault file, which **doesn't include**
-changes made since you turned sync on. To keep them, download a backup from the server first (see above), close
-Vault, and put it in `Documents\FinancialCommandCenter\` with the vault's file name (e.g.
-`juan_dela_cruz_finance_data.db`).
+### Lost your phone?
+
+On another device, click **🟢 Live sync**, then **Lost a phone? Sign out on every device**, and sign in again on
+the devices you still have.
+
+### Signing out on the desktop
+
+Signing out takes the desktop back to its own vault file, which **doesn't include** changes made while you were
+signed in. Unless you want that old copy, stay signed in.
+
+---
 
 ## Security notes
 
-- Anyone with your server address **and** token can read and change your vaults. Use a long random token and keep
-  it secret, the same way you would a bank password.
-- All traffic is encrypted with HTTPS. The vault files on the server are not encrypted separately, so pick a host
-  you trust (your own Fly.io account or VPS).
-- If the token leaks, set a new one on the server (`fly secrets set VAULT_TOKEN=...`) and enter it on each device.
+- Passwords and recovery codes are stored only as one-way **Argon2 hashes**, and sign-in sessions only as
+  **SHA-256 hashes**. Even someone holding a copy of the server's files can't sign in as anyone.
+- After **5 wrong passwords** (or 5 wrong invite codes), further tries are refused for 15 minutes.
+- All traffic is encrypted with HTTPS. The vault files themselves aren't encrypted on the server, so whoever
+  controls the Oracle account (you) could read them. Family members should know this.
+- To stop new sign-ups, change `VAULT_INVITE_CODE` in `deploy/.env` and run `docker compose up -d`. Existing
+  accounts keep working.
+- A device that hasn't been used for 180 days has to sign in again.
 
 ## For developers
 
 ```
 vault-core/   All business logic (every command), shared by everything below. `cargo test` here.
-server/       The sync server (axum): HTTP API + WebSocket change feed. `cargo test` here.
-src-tauri/    The desktop and mobile app shell; runs vault-core locally when sync is off.
-src/api.js    The frontend's single door to the data: local Tauri backend or the sync server.
+server/       The sync server (axum): accounts, HTTP API and WebSocket change feed. `cargo test` here.
+deploy/       docker-compose (server + Caddy for HTTPS), Caddyfile, nightly backup script.
+src-tauri/    The desktop and mobile app shell; runs vault-core locally when signed out.
+src/api.js    The frontend's single door to the data: the local Tauri backend or the sync server.
 ```
 
-Server API (every `/api` route needs `Authorization: Bearer <token>`):
+Server configuration: `VAULT_INVITE_CODE` (required, 8+ characters), `VAULT_DATA_DIR` (default `data`),
+`PORT` (default `8080`). Accounts live in `<data>/accounts.db`, and each account's vaults in `<data>/users/<id>/`.
 
-| Route                       | Purpose                                                              |
-|-----------------------------|----------------------------------------------------------------------|
-| `GET  /health`              | Liveness check (no token).                                           |
-| `GET  /api/ping`            | Checks the token.                                                    |
-| `POST /api/login`           | `{ profile }`: opens (or creates) a vault.                           |
-| `POST /api/call`            | `{ profile, cmd, args, clientId }`: runs any app command.            |
-| `GET  /api/vault/{profile}` | Downloads a complete copy of the vault.                              |
-| `PUT  /api/vault/{profile}` | Uploads a vault. Refuses to overwrite data unless `?replace=true`.   |
-| `GET  /api/events?token=…`  | WebSocket: `{"type":"changed","profile":…,"clientId":…}` after every change. |
+| Route                              | Auth    | Purpose                                                        |
+|------------------------------------|---------|----------------------------------------------------------------|
+| `GET  /health`                     | none    | Liveness check.                                                |
+| `POST /api/sign-up`                | none    | `{ email, password, inviteCode }` → `{ token, email, recoveryCode }` |
+| `POST /api/sign-in`                | none    | `{ email, password }` → `{ token, email }`                     |
+| `POST /api/reset-password`         | none    | `{ email, recoveryCode, newPassword }` → `{ token, email, recoveryCode }` |
+| `GET  /api/me`                     | session | The signed-in email.                                           |
+| `POST /api/change-password`        | session | `{ currentPassword, newPassword }`                             |
+| `POST /api/sign-out`               | session | Ends this session.                                             |
+| `POST /api/sign-out-everywhere`    | session | Ends every session of this account.                            |
+| `POST /api/login`                  | session | `{ profile }`: opens (or creates) one of your vaults.          |
+| `POST /api/call`                   | session | `{ profile, cmd, args, clientId }`: runs any app command.      |
+| `GET  /api/vault/{profile}`        | session | Downloads a complete copy of one of your vaults.               |
+| `PUT  /api/vault/{profile}`        | session | Uploads a vault. Refuses to overwrite data unless `?replace=true`. |
+| `GET  /api/events?token=…`         | session | WebSocket: `{"type":"changed","profile":…,"clientId":…}` after each change to your vaults. |
+
+"session" means `Authorization: Bearer <token>`, or `?token=` for the WebSocket.

@@ -8,6 +8,7 @@ on:
     paths:
       - "vault-core/**"
       - "server/**"
+      - "deploy/**"
       - "src/**"
       - "package.json"
       - "package-lock.json"
@@ -16,6 +17,7 @@ on:
     paths:
       - "vault-core/**"
       - "server/**"
+      - "deploy/**"
       - "src/**"
       - "package.json"
       - "package-lock.json"
@@ -45,3 +47,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -f server/Dockerfile -t vault-server .
+      - name: Check the Oracle deployment file
+        run: VAULT_DOMAIN=example.duckdns.org VAULT_INVITE_CODE=ci-check-code docker compose -f deploy/docker-compose.yml config --quiet

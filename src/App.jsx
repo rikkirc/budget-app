@@ -31,6 +31,18 @@ export default function App() {
     });
   }, [isLoggedIn, sync, profileName]);
 
+  // The account's session ended (signed out on every device, or a password reset): lock and ask to sign in again
+  useEffect(() => {
+    const onSignedOut = () => {
+      setSync(null);
+      setIsLoggedIn(false);
+      setShowSync(true);
+      alert("You've been signed out of your account. Please sign in again.");
+    };
+    window.addEventListener("vault:signed-out", onSignedOut);
+    return () => window.removeEventListener("vault:signed-out", onSignedOut);
+  }, []);
+
   const refresh = () => { setChangedElsewhere(false); setRefreshKey(prev => prev + 1); };
 
   const handleSyncChanged = async () => {
@@ -130,9 +142,9 @@ export default function App() {
             🔐 Unlock Vault
           </button>
           <p style={{ color: "#6b7280", fontSize: "14px", marginTop: "25px", marginBottom: 0 }}>
-            {sync ? "☁️ Synced with your Vault server" : "💻 This computer only"}
+            {sync ? `☁️ Signed in as ${sync.email}` : IS_MOBILE ? "" : "💻 This computer only"}
             {" · "}
-            <button onClick={() => setShowSync(true)} style={{ background: "none", border: "none", color: "#2563eb", cursor: "pointer", fontSize: "14px", padding: 0, textDecoration: "underline" }}>Sync settings</button>
+            <button onClick={() => setShowSync(true)} style={{ background: "none", border: "none", color: "#2563eb", cursor: "pointer", fontSize: "14px", padding: 0, textDecoration: "underline" }}>{sync ? "Account" : "Sign in to sync"}</button>
           </p>
         </div>
       </div>
@@ -157,7 +169,7 @@ export default function App() {
           <span style={{ fontSize: "16px", fontWeight: "bold", color: "#1f2937", backgroundColor: "#f3f4f6", padding: "10px 15px", borderRadius: "5px", border: "1px solid #d1d5db" }}>
             👤 Vault: {profileName}
           </span>
-          <button onClick={() => setShowSync(true)} title={sync ? `Syncing with ${sync.url}` : "Set up sync with your phone"} style={{ padding: "10px 15px", cursor: "pointer", fontWeight: "bold", fontSize: "14px", backgroundColor: !sync ? "#f3f4f6" : liveLink ? "#ecfdf5" : "#fff7ed", color: !sync ? "#374151" : liveLink ? "#047857" : "#c2410c", border: "1px solid #d1d5db", borderRadius: "5px" }}>
+          <button onClick={() => setShowSync(true)} title={sync ? `Signed in as ${sync.email} on ${sync.url}` : "Sign in to sync with your phone"} style={{ padding: "10px 15px", cursor: "pointer", fontWeight: "bold", fontSize: "14px", backgroundColor: !sync ? "#f3f4f6" : liveLink ? "#ecfdf5" : "#fff7ed", color: !sync ? "#374151" : liveLink ? "#047857" : "#c2410c", border: "1px solid #d1d5db", borderRadius: "5px" }}>
             {!sync ? "💻 Local only" : liveLink ? "🟢 Live sync" : "🟠 Reconnecting…"}
           </button>
           <button onClick={refresh} style={{ padding: "12px 24px", cursor: "pointer", fontWeight: "bold", fontSize: "16px", backgroundColor: "#0891b2", color: "white", border: "none", borderRadius: "5px", transition: "0.2s" }}>

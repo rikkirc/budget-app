@@ -1,4 +1,5 @@
 # Build from the repository root (the server needs ../vault-core):  docker build -f server/Dockerfile -t vault-server .
+# Usually you run it with deploy/docker-compose.yml instead, which adds HTTPS.
 FROM rust:1-bookworm AS build
 WORKDIR /src
 COPY vault-core vault-core
