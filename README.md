@@ -4,11 +4,16 @@ A desktop budgeting app built with [Tauri](https://tauri.app/), React, and Vite.
 
 ## Features
 
-- **Dashboard**: an overview of your accounts and finances
-- **Cash Flow**: track money coming in and going out
-- **Bi-Monthly Budget**: plan spending across twice-monthly pay periods
-- **Loan Generator**: model debt and loan payoff
+- **Dashboard**: an overview of your accounts and finances, with the total of the next 5 upcoming bills
+- **Cash Flow**: track money coming in and going out, with transaction history per account or across all accounts
+- **Bi-Monthly Budget**: plan spending across twice-monthly pay periods; move bills between paychecks and split recurring bills into halves
+- **Loan Generator**: model debt and loan payoff, with Sinking Fund or True Bi-Monthly schedules
+- **Search**: find any bill, loan, or amount
 - **Smart bills**: reminders at login for recurring bills due within 10 days that still need an amount
+
+## User's Manual
+
+New to the app? Read the [User's Manual](docs/USER_MANUAL.md), or the print-ready [PDF version](docs/Vault-User-Manual.pdf).
 
 ## Getting started
 
