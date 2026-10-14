@@ -12,7 +12,7 @@ struct AppState {
 
 #[derive(Serialize)] struct Account { id: i32, name: String, balance: f64 }
 #[derive(Serialize)] struct TransactionLog { id: i32, account_name: String, tx_type: String, amount: f64, description: String, is_reversed: bool, created_at: String, linked_account_name: String }
-#[derive(Serialize)] struct SmartBill { id: i32, name: String, amount: f64, due_date: String, payday_date: String, is_recurring: bool, loan_id: i32 }
+#[derive(Serialize)] struct SmartBill { id: i32, name: String, amount: f64, due_date: String, payday_date: String, is_recurring: bool, loan_id: i32, series_id: i32 }
 #[derive(Serialize)] struct Loan { id: i32, name: String, principal: f64, remaining_balance: f64, term: i32, term_type: String, frequency: String, payment_amount: f64, next_due_date: String, payday_date: String, total_incurred: f64, due_structure: String, date_acquired: String }
 #[derive(Serialize)] struct PaidBill { id: i32, original_bill_id: i32, name: String, amount: f64, due_date: String, payday_date: String, account_id: i32, from_account_id: i32, loan_id: i32 }
 #[derive(Serialize)] struct CompletedLoan { id: i32, original_id: i32, name: String, principal: f64, term: i32, term_type: String, frequency: String, payment_amount: f64, total_incurred: f64, completed_date: String }
@@ -63,7 +63,13 @@ fn init_schema(conn: &Connection) {
     let _ = conn.execute("ALTER TABLE transactions ADD COLUMN is_reversed INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE transactions ADD COLUMN linked_id INTEGER", []);
     let _ = conn.execute("ALTER TABLE paid_bills ADD COLUMN from_account_id INTEGER NOT NULL DEFAULT 0", []);
+    // Split recurring bills: both halves of a pair (and every future month's pair) share one series_id. 0 = not a split bill.
+    let _ = conn.execute("ALTER TABLE smart_bills ADD COLUMN series_id INTEGER NOT NULL DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE paid_bills ADD COLUMN series_id INTEGER NOT NULL DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE paid_bills ADD COLUMN is_recurring INTEGER NOT NULL DEFAULT 0", []);
     conn.execute("CREATE TABLE IF NOT EXISTS archived_smart_bills (id INTEGER PRIMARY KEY, original_id INTEGER, name TEXT NOT NULL, amount REAL NOT NULL, due_date TEXT NOT NULL, payday_date TEXT NOT NULL)", []).unwrap();
+    let _ = conn.execute("ALTER TABLE archived_smart_bills ADD COLUMN series_id INTEGER NOT NULL DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE archived_smart_bills ADD COLUMN is_recurring INTEGER NOT NULL DEFAULT 0", []);
         conn.execute("CREATE TABLE IF NOT EXISTS completed_loans (id INTEGER PRIMARY KEY, original_id INTEGER, name TEXT NOT NULL, principal REAL NOT NULL, term INTEGER NOT NULL, term_type TEXT NOT NULL, frequency TEXT NOT NULL, payment_amount REAL NOT NULL, total_incurred REAL NOT NULL, completed_date TEXT NOT NULL)", []).unwrap();
     // Date a loan was acquired/taken out (optional; blank for older loans)
     let _ = conn.execute("ALTER TABLE loans ADD COLUMN date_acquired TEXT NOT NULL DEFAULT ''", []);
@@ -134,8 +140,68 @@ fn undo_transaction(transaction_id: i32, state: State<'_, AppState>) -> String {
 // account_id = None returns the complete history across all accounts; Some(id) returns only that account's entries
 #[tauri::command] fn get_transactions_page(offset: i32, limit: i32, account_id: Option<i32>, state: State<'_, AppState>) -> Vec<TransactionLog> { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); get_transactions_page_impl(&conn, offset, limit, account_id) }
 fn get_transactions_page_impl(conn: &Connection, offset: i32, limit: i32, account_id: Option<i32>) -> Vec<TransactionLog> { let mut stmt = conn.prepare("SELECT t.id, a.name, t.tx_type, t.amount, t.description, t.is_reversed, t.created_at, COALESCE(pa.name, '') FROM transactions t JOIN accounts a ON t.account_id = a.id LEFT JOIN transactions p ON t.linked_id = p.id LEFT JOIN accounts pa ON p.account_id = pa.id WHERE (?3 IS NULL OR t.account_id = ?3) ORDER BY t.id DESC LIMIT ?1 OFFSET ?2").unwrap(); let iter = stmt.query_map(params![limit, offset, account_id], |row| { let reversed_int: i32 = row.get(5).unwrap_or(0); Ok(TransactionLog { id: row.get(0).unwrap_or(0), account_name: row.get(1).unwrap_or_else(|_| "".to_string()), tx_type: row.get(2).unwrap_or_else(|_| "".to_string()), amount: row.get(3).unwrap_or(0.0), description: row.get(4).unwrap_or_else(|_| "".to_string()), is_reversed: reversed_int != 0, created_at: row.get(6).unwrap_or_else(|_| "".to_string()), linked_account_name: row.get(7).unwrap_or_else(|_| "".to_string()) }) }).unwrap(); let mut logs = Vec::new(); for t in iter { if let Ok(l) = t { logs.push(l); } } logs }
-#[tauri::command] fn add_smart_bill(name: &str, amount: f64, due_date: &str, payday_date: &str, is_recurring: bool, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); match conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, is_recurring) VALUES (?1, ?2, ?3, ?4, ?5)", params![name, amount, due_date, payday_date, is_recurring as i32]) { Ok(_) => "SUCCESS!".to_string(), Err(_) => "ERROR".to_string() } }
-#[tauri::command] fn update_bill_amount(bill_id: i32, new_amount: f64, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); match conn.execute("UPDATE smart_bills SET amount = ?1 WHERE id = ?2", params![new_amount, bill_id]) { Ok(_) => "SUCCESS: Amount updated!".to_string(), Err(_) => "ERROR: Could not update amount".to_string() } }
+// split = true turns a recurring bill into a Sinking Fund pair: "(1st Half)" saved to a fund, "(2nd Half (Due))" paid on the real due date
+#[tauri::command] fn add_smart_bill(name: &str, amount: f64, due_date: &str, payday_date: &str, is_recurring: bool, split: Option<bool>, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); add_smart_bill_impl(&conn, name, amount, due_date, payday_date, is_recurring, split.unwrap_or(false)) }
+fn add_smart_bill_impl(conn: &Connection, name: &str, amount: f64, due_date: &str, payday_date: &str, is_recurring: bool, split: bool) -> String {
+    if split {
+        if !is_recurring { return "ERROR: Only recurring bills can be split into halves.".to_string(); }
+        let series_id = next_series_id(conn);
+        create_split_pair(conn, name, amount, due_date, payday_date, series_id);
+        return "SUCCESS!".to_string();
+    }
+    match conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, is_recurring) VALUES (?1, ?2, ?3, ?4, ?5)", params![name, amount, due_date, payday_date, is_recurring as i32]) { Ok(_) => "SUCCESS!".to_string(), Err(_) => "ERROR".to_string() }
+}
+// For a split bill, new_amount is the FULL bill amount: both unpaid halves of that month get half each
+#[tauri::command] fn update_bill_amount(bill_id: i32, new_amount: f64, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); update_bill_amount_impl(&conn, bill_id, new_amount) }
+fn update_bill_amount_impl(conn: &Connection, bill_id: i32, new_amount: f64) -> String {
+    let bill: Option<(String, String, i32)> = conn.query_row("SELECT name, due_date, series_id FROM smart_bills WHERE id = ?1", params![bill_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).ok();
+    match bill {
+        Some((name, due, series_id)) if series_id != 0 => {
+            // Work out this month's real due date (the 2nd Half's), then update whichever halves are still unpaid
+            let second_half_due: String = if name.contains("(1st Half)") { conn.query_row("SELECT date(?1, '+15 days')", params![due], |r| r.get(0)).unwrap_or(due) } else { due };
+            match conn.execute("UPDATE smart_bills SET amount = ?1 / 2.0 WHERE series_id = ?2 AND (due_date = ?3 OR due_date = date(?3, '-15 days'))", params![new_amount, series_id, second_half_due]) { Ok(_) => "SUCCESS: Amount updated! Each half is now half of the full bill.".to_string(), Err(_) => "ERROR: Could not update amount".to_string() }
+        }
+        _ => match conn.execute("UPDATE smart_bills SET amount = ?1 WHERE id = ?2", params![new_amount, bill_id]) { Ok(_) => "SUCCESS: Amount updated!".to_string(), Err(_) => "ERROR: Could not update amount".to_string() }
+    }
+}
+// Turn an existing recurring bill into a split pair. Its current paycheck stays with the 2nd Half; the 1st Half gets the usual payday rule.
+#[tauri::command] fn split_recurring_bill(bill_id: i32, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); split_recurring_bill_impl(&conn, bill_id) }
+fn split_recurring_bill_impl(conn: &Connection, bill_id: i32) -> String {
+    let bill: Option<(String, f64, String, String, i32, i32, i32)> = conn.query_row("SELECT name, amount, due_date, payday_date, is_recurring, loan_id, series_id FROM smart_bills WHERE id = ?1", params![bill_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?))).ok();
+    let Some((name, amount, due, payday, is_recurring, loan_id, series_id)) = bill else { return "ERROR: Could not find that bill.".to_string(); };
+    if is_recurring == 0 || loan_id != 0 { return "ERROR: Only recurring bills (not loan payments) can be split.".to_string(); }
+    if series_id != 0 { return "ERROR: This bill is already split into halves.".to_string(); }
+    let new_series = next_series_id(conn);
+    create_split_pair(conn, &name, amount, &due, &payday, new_series);
+    let _ = conn.execute("DELETE FROM smart_bills WHERE id = ?1", params![bill_id]);
+    format!("SUCCESS: {} is now split into a 1st Half and 2nd Half (Due)!", name)
+}
+// Same rule the app uses everywhere: the latest payday (15th or end of month) at least 11 days before the due date
+fn preceding_payday(conn: &Connection, due: &str) -> String {
+    let gap_date: String = conn.query_row("SELECT date(?1, '-11 days')", params![due], |r| r.get(0)).unwrap_or_else(|_| due.to_string());
+    conn.query_row(
+        "SELECT MAX(c) FROM (
+            SELECT date(?1, 'start of month', '-1 month', '+14 days') AS c
+            UNION ALL SELECT date(?1, 'start of month', '-1 day')
+            UNION ALL SELECT date(?1, 'start of month', '+14 days')
+            UNION ALL SELECT date(?1, 'start of month', '+1 month', '-1 day')
+         ) WHERE c <= ?1",
+        params![gap_date],
+        |r| r.get(0)
+    ).unwrap_or_else(|_| due.to_string())
+}
+fn next_series_id(conn: &Connection) -> i32 {
+    conn.query_row("SELECT COALESCE(MAX(s), 0) + 1 FROM (SELECT MAX(series_id) AS s FROM smart_bills UNION ALL SELECT MAX(series_id) FROM paid_bills UNION ALL SELECT MAX(series_id) FROM archived_smart_bills)", [], |r| r.get(0)).unwrap_or(1)
+}
+// Creates one month's pair. second_half_due is the real due date; the 1st Half is due 15 days earlier, like loan halves.
+fn create_split_pair(conn: &Connection, base_name: &str, full_amount: f64, second_half_due: &str, second_half_payday: &str, series_id: i32) {
+    let first_half_due: String = conn.query_row("SELECT date(?1, '-15 days')", params![second_half_due], |r| r.get(0)).unwrap();
+    let first_half_payday = preceding_payday(conn, &first_half_due);
+    // Unrounded on purpose (like loan halves): the 2nd Half charges double its amount, so rounding here could make the full payment a cent off
+    let half = full_amount / 2.0;
+    let _ = conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id, is_recurring, series_id) VALUES (?1, ?2, ?3, ?4, 0, 1, ?5)", params![format!("{} (1st Half)", base_name), half, first_half_due, first_half_payday, series_id]);
+    let _ = conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id, is_recurring, series_id) VALUES (?1, ?2, ?3, ?4, 0, 1, ?5)", params![format!("{} (2nd Half (Due))", base_name), half, second_half_due, second_half_payday, series_id]);
+}
 // Reassign one unpaid bill to a different paycheck allocation (only this occurrence; next month's recurring copy still uses the normal payday rule)
 #[tauri::command] fn move_bill_allocation(bill_id: i32, new_payday: &str, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); move_bill_allocation_impl(&conn, bill_id, new_payday) }
 fn move_bill_allocation_impl(conn: &Connection, bill_id: i32, new_payday: &str) -> String {
@@ -149,7 +215,7 @@ fn move_bill_allocation_impl(conn: &Connection, bill_id: i32, new_payday: &str) 
         _ => "ERROR: Could not find that bill. It may have already been paid.".to_string(),
     }
 }
-#[tauri::command] fn get_smart_bills(state: State<'_, AppState>) -> Vec<SmartBill> { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let mut stmt = conn.prepare("SELECT id, name, amount, due_date, payday_date, is_recurring, loan_id FROM smart_bills").unwrap(); let iter = stmt.query_map([], |row| { let recurring_int: i32 = row.get(5).unwrap_or(0); Ok(SmartBill { id: row.get(0).unwrap_or(0), name: row.get(1).unwrap_or_else(|_| "".to_string()), amount: row.get(2).unwrap_or(0.0), due_date: row.get(3).unwrap_or_else(|_| "".to_string()), payday_date: row.get(4).unwrap_or_else(|_| "".to_string()), is_recurring: recurring_int != 0, loan_id: row.get(6).unwrap_or(0) }) }).unwrap(); let mut bills = Vec::new(); for b in iter { if let Ok(item) = b { bills.push(item); } } bills }
+#[tauri::command] fn get_smart_bills(state: State<'_, AppState>) -> Vec<SmartBill> { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let mut stmt = conn.prepare("SELECT id, name, amount, due_date, payday_date, is_recurring, loan_id, series_id FROM smart_bills").unwrap(); let iter = stmt.query_map([], |row| { let recurring_int: i32 = row.get(5).unwrap_or(0); Ok(SmartBill { id: row.get(0).unwrap_or(0), name: row.get(1).unwrap_or_else(|_| "".to_string()), amount: row.get(2).unwrap_or(0.0), due_date: row.get(3).unwrap_or_else(|_| "".to_string()), payday_date: row.get(4).unwrap_or_else(|_| "".to_string()), is_recurring: recurring_int != 0, loan_id: row.get(6).unwrap_or(0), series_id: row.get(7).unwrap_or(0) }) }).unwrap(); let mut bills = Vec::new(); for b in iter { if let Ok(item) = b { bills.push(item); } } bills }
 #[tauri::command] fn add_loan(name: &str, principal: f64, remaining_balance: f64, term: i32, term_type: &str, frequency: &str, payment_amount: f64, due_date: &str, payday_date: &str, total_incurred: f64, due_structure: &str, date_acquired: &str, bill_names: Vec<String>, bill_amounts: Vec<f64>, bill_dues: Vec<String>, bill_paydays: Vec<String>, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let _ = conn.execute("INSERT INTO loans (name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure, date_acquired) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)", params![name, principal, remaining_balance, term, term_type, frequency, payment_amount, due_date, payday_date, total_incurred, due_structure, date_acquired]); let new_loan_id = conn.last_insert_rowid(); for i in 0..bill_names.len() { let _ = conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id) VALUES (?1, ?2, ?3, ?4, ?5)", params![bill_names[i], bill_amounts[i], bill_dues[i], bill_paydays[i], new_loan_id]); } "SUCCESS: Loan generated!".to_string() }
 #[tauri::command] fn get_loans(state: State<'_, AppState>) -> Vec<Loan> { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let mut stmt = conn.prepare("SELECT id, name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure, date_acquired FROM loans").unwrap(); let iter = stmt.query_map([], |row| { Ok(Loan { id: row.get(0).unwrap_or(0), name: row.get(1).unwrap_or_else(|_| "".to_string()), principal: row.get(2).unwrap_or(0.0), remaining_balance: row.get(3).unwrap_or(0.0), term: row.get(4).unwrap_or(0), term_type: row.get(5).unwrap_or_else(|_| "".to_string()), frequency: row.get(6).unwrap_or_else(|_| "".to_string()), payment_amount: row.get(7).unwrap_or(0.0), next_due_date: row.get(8).unwrap_or_else(|_| "".to_string()), payday_date: row.get(9).unwrap_or_else(|_| "".to_string()), total_incurred: row.get(10).unwrap_or(0.0), due_structure: row.get(11).unwrap_or_else(|_| "Sinking Fund".to_string()), date_acquired: row.get(12).unwrap_or_else(|_| "".to_string()) }) }).unwrap(); let mut loans = Vec::new(); for l in iter { if let Ok(item) = l { loans.push(item); } } loans }
 #[tauri::command] fn delete_loan(loan_id: i32, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let mut stmt = conn.prepare("SELECT name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure, date_acquired FROM loans WHERE id = ?1").unwrap(); let mut rows = stmt.query(params![loan_id]).unwrap(); if let Some(row) = rows.next().unwrap() { let name: String = row.get(0).unwrap(); let principal: f64 = row.get(1).unwrap(); let remaining_balance: f64 = row.get(2).unwrap(); let term: i32 = row.get(3).unwrap(); let term_type: String = row.get(4).unwrap(); let frequency: String = row.get(5).unwrap(); let payment_amount: f64 = row.get(6).unwrap(); let next_due_date: String = row.get(7).unwrap(); let payday_date: String = row.get(8).unwrap(); let total_incurred: f64 = row.get(9).unwrap_or(0.0); let due_structure: String = row.get(10).unwrap_or_else(|_| "Sinking Fund".to_string()); let date_acquired: String = row.get(11).unwrap_or_else(|_| "".to_string()); let _ = conn.execute("INSERT INTO archived_loans (original_id, name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure, date_acquired) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)", params![loan_id, name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure, date_acquired]); let search_pattern = format!("{}%", name); let _ = conn.execute("DELETE FROM smart_bills WHERE name LIKE ?1", params![search_pattern]); } let _ = conn.execute("DELETE FROM loans WHERE id = ?1", params![loan_id]); "SUCCESS: Loan moved to Recycle Bin!".to_string() }
@@ -158,16 +224,20 @@ fn move_bill_allocation_impl(conn: &Connection, bill_id: i32, new_payday: &str) 
 fn fund_bill_to_savings(bill_id: i32, from_account_id: i32, to_account_id: i32, amount: f64, description: &str, state: State<'_, AppState>) -> String {
     let db = state.db_path.lock().unwrap().clone();
     let conn = Connection::open(&db).unwrap();
-    
+    fund_bill_to_savings_impl(&conn, bill_id, from_account_id, to_account_id, amount, description)
+}
+fn fund_bill_to_savings_impl(conn: &Connection, bill_id: i32, from_account_id: i32, to_account_id: i32, amount: f64, description: &str) -> String {
     // 1. Get bill details (now also grabbing loan_id!)
-    let mut stmt = conn.prepare("SELECT name, due_date, payday_date, loan_id FROM smart_bills WHERE id = ?1").unwrap();
+    let mut stmt = conn.prepare("SELECT name, due_date, payday_date, loan_id, series_id, is_recurring FROM smart_bills WHERE id = ?1").unwrap();
     let mut rows = stmt.query(params![bill_id]).unwrap();
-    
+
     if let Some(row) = rows.next().unwrap() {
         let bill_name: String = row.get(0).unwrap();
         let due: String = row.get(1).unwrap();
         let payday: String = row.get(2).unwrap();
         let bill_loan_id: i32 = row.get(3).unwrap_or(0);
+        let series_id: i32 = row.get(4).unwrap_or(0);
+        let is_recurring: i32 = row.get(5).unwrap_or(0);
 
         // 🛡️ SAFETY CHECK: Does the source account actually have enough money?
         let current_balance: f64 = conn.query_row(
@@ -181,7 +251,7 @@ fn fund_bill_to_savings(bill_id: i32, from_account_id: i32, to_account_id: i32, 
         }
         
         // 2. Move to paid_bills (this acts as your receipt/sinking fund archive) — now correctly tagged with loan_id AND from_account_id
-        let _ = conn.execute("INSERT INTO paid_bills (original_bill_id, name, amount, due_date, payday_date, account_id, loan_id, from_account_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)", params![bill_id, bill_name, amount, due, payday, to_account_id, bill_loan_id, from_account_id]);
+        let _ = conn.execute("INSERT INTO paid_bills (original_bill_id, name, amount, due_date, payday_date, account_id, loan_id, from_account_id, series_id, is_recurring) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)", params![bill_id, bill_name, amount, due, payday, to_account_id, bill_loan_id, from_account_id, series_id, is_recurring]);
         let _ = conn.execute("DELETE FROM smart_bills WHERE id = ?1", params![bill_id]);
         
         // 3. Move money from source account to destination savings account
@@ -199,11 +269,13 @@ fn fund_bill_to_savings(bill_id: i32, from_account_id: i32, to_account_id: i32, 
 fn pay_bill(bill_id: i32, account_id: i32, amount: f64, description: &str, state: State<'_, AppState>) -> String {
     let db = state.db_path.lock().unwrap().clone();
     let conn = Connection::open(&db).unwrap();
-    
+    pay_bill_impl(&conn, bill_id, account_id, amount, description)
+}
+fn pay_bill_impl(conn: &Connection, bill_id: i32, account_id: i32, amount: f64, description: &str) -> String {
     // 1. Get details of the bill being paid
-    let mut stmt = conn.prepare("SELECT name, due_date, payday_date, loan_id, is_recurring FROM smart_bills WHERE id = ?1").unwrap();
+    let mut stmt = conn.prepare("SELECT name, due_date, payday_date, loan_id, is_recurring, series_id FROM smart_bills WHERE id = ?1").unwrap();
     let mut rows = stmt.query(params![bill_id]).unwrap();
-    
+
     if let Some(row) = rows.next().unwrap() {
         let bill_name: String = row.get(0).unwrap();
         let due: String = row.get(1).unwrap();
@@ -211,6 +283,7 @@ fn pay_bill(bill_id: i32, account_id: i32, amount: f64, description: &str, state
         let bill_loan_id: i32 = row.get(3).unwrap_or(0);
         let is_recurring_int: i32 = row.get(4).unwrap_or(0);
         let is_recurring = is_recurring_int != 0;
+        let series_id: i32 = row.get(5).unwrap_or(0);
 
         // Look up this loan's due_structure and name by its actual ID — never guess from text again
         let (loan_name, due_structure): (String, String) = conn.query_row(
@@ -239,7 +312,7 @@ fn pay_bill(bill_id: i32, account_id: i32, amount: f64, description: &str, state
         }
         
         // Move to paid bills (still logs the bill's own listed amount, for accurate receipts) — now also tagged with loan_id
-        let _ = conn.execute("INSERT INTO paid_bills (original_bill_id, name, amount, due_date, payday_date, account_id, loan_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)", params![bill_id, bill_name, amount, due, payday, account_id, bill_loan_id]);
+        let _ = conn.execute("INSERT INTO paid_bills (original_bill_id, name, amount, due_date, payday_date, account_id, loan_id, series_id, is_recurring) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)", params![bill_id, bill_name, amount, due, payday, account_id, bill_loan_id, series_id, is_recurring_int]);
         let _ = conn.execute("DELETE FROM smart_bills WHERE id = ?1", params![bill_id]);
 
         // 🔁 RECURRING BILL: automatically create next month's occurrence, amount reset to TBD (0)
@@ -247,22 +320,18 @@ fn pay_bill(bill_id: i32, account_id: i32, amount: f64, description: &str, state
             // Next month's due date, same day (e.g. Sep 20 -> Oct 20)
             let next_due: String = conn.query_row("SELECT date(?1, '+1 month')", params![due], |r| r.get(0)).unwrap_or_else(|_| due.clone());
             // Same 10-day rule as loans: the paycheck must land at least 11 days before the due date
-            let gap_date: String = conn.query_row("SELECT date(?1, '-11 days')", params![next_due], |r| r.get(0)).unwrap_or_else(|_| next_due.clone());
-            // Paydays are the 15th and the end of the month: pick the latest one on or before the gap date
-            let next_payday: String = conn.query_row(
-                "SELECT MAX(c) FROM (
-                    SELECT date(?1, 'start of month', '-1 month', '+14 days') AS c
-                    UNION ALL SELECT date(?1, 'start of month', '-1 day')
-                    UNION ALL SELECT date(?1, 'start of month', '+14 days')
-                    UNION ALL SELECT date(?1, 'start of month', '+1 month', '-1 day')
-                 ) WHERE c <= ?1",
-                params![gap_date],
-                |r| r.get(0)
-            ).unwrap_or_else(|_| payday.clone());
-            let _ = conn.execute(
-                "INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id, is_recurring) VALUES (?1, 0, ?2, ?3, 0, 1)",
-                params![bill_name, next_due, next_payday]
-            );
+            let next_payday = preceding_payday(conn, &next_due);
+            if series_id != 0 {
+                // Split bill: next month's pair is created once, when this month's 2nd Half (the real due date) is paid
+                if let Some(idx) = bill_name.find(" (2nd Half") {
+                    create_split_pair(conn, &bill_name[..idx], 0.0, &next_due, &next_payday, series_id);
+                }
+            } else {
+                let _ = conn.execute(
+                    "INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id, is_recurring) VALUES (?1, 0, ?2, ?3, 0, 1)",
+                    params![bill_name, next_due, next_payday]
+                );
+            }
         }
         
         // Deduct the REAL full amount from the account and log it
@@ -270,16 +339,16 @@ fn pay_bill(bill_id: i32, account_id: i32, amount: f64, description: &str, state
         let _ = conn.execute("INSERT INTO transactions (account_id, tx_type, amount, description) VALUES (?1, 'EXPENSE', ?2, ?3)", params![account_id, real_amount, description]);
 
         if is_sinking_fund_second_half {
-            // Match the 1st Half by loan_id + exact 15-day relationship — no more name/date guesswork
+            // Match the 1st Half by loan_id + series_id + exact 15-day relationship — no more name/date guesswork
             let _ = conn.execute(
-                "INSERT INTO paid_bills (original_bill_id, name, amount, due_date, payday_date, account_id, loan_id) 
-                 SELECT id, name, amount, due_date, payday_date, ?1, loan_id FROM smart_bills 
-                 WHERE loan_id = ?2 AND name LIKE '%(1st Half)%' AND due_date = date(?3, '-15 days')",
-                params![account_id, bill_loan_id, due]
+                "INSERT INTO paid_bills (original_bill_id, name, amount, due_date, payday_date, account_id, loan_id, series_id, is_recurring)
+                 SELECT id, name, amount, due_date, payday_date, ?1, loan_id, series_id, is_recurring FROM smart_bills
+                 WHERE loan_id = ?2 AND series_id = ?4 AND name LIKE '%(1st Half)%' AND due_date = date(?3, '-15 days')",
+                params![account_id, bill_loan_id, due, series_id]
             );
             let _ = conn.execute(
-                "DELETE FROM smart_bills WHERE loan_id = ?1 AND name LIKE '%(1st Half)%' AND due_date = date(?2, '-15 days')",
-                params![bill_loan_id, due]
+                "DELETE FROM smart_bills WHERE loan_id = ?1 AND series_id = ?3 AND name LIKE '%(1st Half)%' AND due_date = date(?2, '-15 days')",
+                params![bill_loan_id, due, series_id]
             );
         }
 
@@ -315,8 +384,10 @@ fn pay_bill(bill_id: i32, account_id: i32, amount: f64, description: &str, state
 fn undo_bill_payment(paid_bill_id: i32, state: State<'_, AppState>) -> String {
     let db = state.db_path.lock().unwrap().clone();
     let conn = Connection::open(&db).unwrap();
-
-    let mut stmt = conn.prepare("SELECT name, amount, due_date, payday_date, account_id, loan_id FROM paid_bills WHERE id = ?1").unwrap();
+    undo_bill_payment_impl(&conn, paid_bill_id)
+}
+fn undo_bill_payment_impl(conn: &Connection, paid_bill_id: i32) -> String {
+    let mut stmt = conn.prepare("SELECT name, amount, due_date, payday_date, account_id, loan_id, series_id, is_recurring FROM paid_bills WHERE id = ?1").unwrap();
     let mut rows = stmt.query(params![paid_bill_id]).unwrap();
 
     if let Some(row) = rows.next().unwrap() {
@@ -326,6 +397,8 @@ fn undo_bill_payment(paid_bill_id: i32, state: State<'_, AppState>) -> String {
         let payday: String = row.get(3).unwrap();
         let account_id: i32 = row.get(4).unwrap();
         let loan_id: i32 = row.get(5).unwrap_or(0);
+        let series_id: i32 = row.get(6).unwrap_or(0);
+        let is_recurring: i32 = row.get(7).unwrap_or(0);
 
         // Figure out if this was a Sinking Fund 2nd Half (meaning the REAL amount taken was double the listed amount)
         let due_structure: String = conn.query_row(
@@ -368,29 +441,36 @@ fn undo_bill_payment(paid_bill_id: i32, state: State<'_, AppState>) -> String {
             }
         }
 
-        // 3. Restore this bill to smart_bills (with its correct loan_id)
-        let _ = conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id) VALUES (?1, ?2, ?3, ?4, ?5)", params![name, amount, due, payday, loan_id]);
+        // 3. Restore this bill to smart_bills (with its correct loan_id, recurring flag, and split series)
+        let _ = conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id, series_id, is_recurring) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)", params![name, amount, due, payday, loan_id, series_id, is_recurring]);
 
         // 4. If it was a Sinking Fund 2nd Half, also restore the matching 1st Half that got auto-cleared
         if is_sinking_fund_second_half {
             let _ = conn.execute(
-                "INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id)
-                 SELECT name, amount, due_date, payday_date, loan_id FROM paid_bills
-                 WHERE loan_id = ?1 AND name LIKE '%(1st Half)%' AND due_date = date(?2, '-15 days')
+                "INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id, series_id, is_recurring)
+                 SELECT name, amount, due_date, payday_date, loan_id, series_id, is_recurring FROM paid_bills
+                 WHERE loan_id = ?1 AND series_id = ?3 AND name LIKE '%(1st Half)%' AND due_date = date(?2, '-15 days')
                  ORDER BY id DESC LIMIT 1",
-                params![loan_id, due]
+                params![loan_id, due, series_id]
             );
             let _ = conn.execute(
-                "DELETE FROM paid_bills WHERE id = (SELECT id FROM paid_bills WHERE loan_id = ?1 AND name LIKE '%(1st Half)%' AND due_date = date(?2, '-15 days') ORDER BY id DESC LIMIT 1)",
-                params![loan_id, due]
+                "DELETE FROM paid_bills WHERE id = (SELECT id FROM paid_bills WHERE loan_id = ?1 AND series_id = ?3 AND name LIKE '%(1st Half)%' AND due_date = date(?2, '-15 days') ORDER BY id DESC LIMIT 1)",
+                params![loan_id, due, series_id]
             );
         }
 
-        // 5. Remove the auto-generated NEXT recurring bill this payment may have created (only if it's still untouched/TBD)
-        let _ = conn.execute(
-            "DELETE FROM smart_bills WHERE name = ?1 AND loan_id = 0 AND is_recurring = 1 AND amount = 0 AND due_date = date(?2, '+1 month')",
-            params![name, due]
-        );
+        // 5. Remove the auto-generated NEXT recurring bill(s) this payment may have created (only if still untouched/TBD)
+        if series_id != 0 {
+            let _ = conn.execute(
+                "DELETE FROM smart_bills WHERE series_id = ?1 AND loan_id = 0 AND is_recurring = 1 AND amount = 0 AND (due_date = date(?2, '+1 month') OR due_date = date(date(?2, '+1 month'), '-15 days'))",
+                params![series_id, due]
+            );
+        } else {
+            let _ = conn.execute(
+                "DELETE FROM smart_bills WHERE name = ?1 AND loan_id = 0 AND series_id = 0 AND is_recurring = 1 AND amount = 0 AND due_date = date(?2, '+1 month')",
+                params![name, due]
+            );
+        }
 
         // 6. Remove this paid receipt
         let _ = conn.execute("DELETE FROM paid_bills WHERE id = ?1", params![paid_bill_id]);
@@ -402,29 +482,32 @@ fn undo_bill_payment(paid_bill_id: i32, state: State<'_, AppState>) -> String {
 #[tauri::command] fn get_archived_loans(state: State<'_, AppState>) -> Vec<Loan> { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let mut stmt = conn.prepare("SELECT id, name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure, date_acquired FROM archived_loans ORDER BY id DESC").unwrap(); let iter = stmt.query_map([], |row| { Ok(Loan { id: row.get(0).unwrap_or(0), name: row.get(1).unwrap_or_else(|_| "".to_string()), principal: row.get(2).unwrap_or(0.0), remaining_balance: row.get(3).unwrap_or(0.0), term: row.get(4).unwrap_or(0), term_type: row.get(5).unwrap_or_else(|_| "".to_string()), frequency: row.get(6).unwrap_or_else(|_| "".to_string()), payment_amount: row.get(7).unwrap_or(0.0), next_due_date: row.get(8).unwrap_or_else(|_| "".to_string()), payday_date: row.get(9).unwrap_or_else(|_| "".to_string()), total_incurred: row.get(10).unwrap_or(0.0), due_structure: row.get(11).unwrap_or_else(|_| "Sinking Fund".to_string()), date_acquired: row.get(12).unwrap_or_else(|_| "".to_string()) }) }).unwrap(); let mut loans = Vec::new(); for l in iter { if let Ok(item) = l { loans.push(item); } } loans }
 #[tauri::command] fn get_completed_loans(state: State<'_, AppState>) -> Vec<CompletedLoan> { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let mut stmt = conn.prepare("SELECT id, original_id, name, principal, term, term_type, frequency, payment_amount, total_incurred, completed_date FROM completed_loans ORDER BY id DESC").unwrap(); let iter = stmt.query_map([], |row| { Ok(CompletedLoan { id: row.get(0).unwrap_or(0), original_id: row.get(1).unwrap_or(0), name: row.get(2).unwrap_or_else(|_| "".to_string()), principal: row.get(3).unwrap_or(0.0), term: row.get(4).unwrap_or(0), term_type: row.get(5).unwrap_or_else(|_| "".to_string()), frequency: row.get(6).unwrap_or_else(|_| "".to_string()), payment_amount: row.get(7).unwrap_or(0.0), total_incurred: row.get(8).unwrap_or(0.0), completed_date: row.get(9).unwrap_or_else(|_| "".to_string()) }) }).unwrap(); let mut completed = Vec::new(); for l in iter { if let Ok(item) = l { completed.push(item); } } completed }
 #[tauri::command] fn undo_delete_loan(archive_id: i32, bill_names: Vec<String>, bill_amounts: Vec<f64>, bill_dues: Vec<String>, bill_paydays: Vec<String>, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let mut stmt = conn.prepare("SELECT name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure, date_acquired FROM archived_loans WHERE id = ?1").unwrap(); let mut rows = stmt.query(params![archive_id]).unwrap(); if let Some(row) = rows.next().unwrap() { let name: String = row.get(0).unwrap(); let principal: f64 = row.get(1).unwrap(); let remaining_balance: f64 = row.get(2).unwrap(); let term: i32 = row.get(3).unwrap(); let term_type: String = row.get(4).unwrap(); let frequency: String = row.get(5).unwrap(); let payment_amount: f64 = row.get(6).unwrap(); let next_due_date: String = row.get(7).unwrap(); let payday_date: String = row.get(8).unwrap(); let total_incurred: f64 = row.get(9).unwrap_or(0.0); let due_structure: String = row.get(10).unwrap_or_else(|_| "Sinking Fund".to_string()); let date_acquired: String = row.get(11).unwrap_or_else(|_| "".to_string()); let _ = conn.execute("INSERT INTO loans (name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure, date_acquired) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)", params![name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure, date_acquired]); let restored_loan_id = conn.last_insert_rowid(); for i in 0..bill_names.len() { let _ = conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id) VALUES (?1, ?2, ?3, ?4, ?5)", params![bill_names[i], bill_amounts[i], bill_dues[i], bill_paydays[i], restored_loan_id]); } let _ = conn.execute("DELETE FROM archived_loans WHERE id = ?1", params![archive_id]); } "SUCCESS: Loan restored!".to_string() }
-#[tauri::command] fn delete_bill(bill_id: i32, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let mut stmt = conn.prepare("SELECT name, amount, due_date, payday_date FROM smart_bills WHERE id = ?1").unwrap(); let mut rows = stmt.query(params![bill_id]).unwrap(); if let Some(row) = rows.next().unwrap() { let name: String = row.get(0).unwrap(); let amount: f64 = row.get(1).unwrap(); let due: String = row.get(2).unwrap(); let payday: String = row.get(3).unwrap(); let _ = conn.execute("INSERT INTO archived_smart_bills (original_id, name, amount, due_date, payday_date) VALUES (?1, ?2, ?3, ?4, ?5)", params![bill_id, name, amount, due, payday]); } let _ = conn.execute("DELETE FROM smart_bills WHERE id = ?1", params![bill_id]); "SUCCESS: Bill moved to Recycle Bin!".to_string() }
+#[tauri::command] fn delete_bill(bill_id: i32, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let mut stmt = conn.prepare("SELECT name, amount, due_date, payday_date, series_id, is_recurring FROM smart_bills WHERE id = ?1").unwrap(); let mut rows = stmt.query(params![bill_id]).unwrap(); if let Some(row) = rows.next().unwrap() { let name: String = row.get(0).unwrap(); let amount: f64 = row.get(1).unwrap(); let due: String = row.get(2).unwrap(); let payday: String = row.get(3).unwrap(); let series_id: i32 = row.get(4).unwrap_or(0); let is_recurring: i32 = row.get(5).unwrap_or(0); let _ = conn.execute("INSERT INTO archived_smart_bills (original_id, name, amount, due_date, payday_date, series_id, is_recurring) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)", params![bill_id, name, amount, due, payday, series_id, is_recurring]); } let _ = conn.execute("DELETE FROM smart_bills WHERE id = ?1", params![bill_id]); "SUCCESS: Bill moved to Recycle Bin!".to_string() }
 #[tauri::command] fn get_archived_bills(state: State<'_, AppState>) -> Vec<ArchivedBill> { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let mut stmt = conn.prepare("SELECT id, original_id, name, amount, due_date, payday_date FROM archived_smart_bills ORDER BY id DESC").unwrap(); let iter = stmt.query_map([], |row| { Ok(ArchivedBill { id: row.get(0).unwrap_or(0), original_id: row.get(1).unwrap_or(0), name: row.get(2).unwrap_or_else(|_| "".to_string()), amount: row.get(3).unwrap_or(0.0), due_date: row.get(4).unwrap_or_else(|_| "".to_string()), payday_date: row.get(5).unwrap_or_else(|_| "".to_string()) }) }).unwrap(); let mut archived = Vec::new(); for b in iter { if let Ok(item) = b { archived.push(item); } } archived }
-#[tauri::command] fn undo_delete_bill(archive_id: i32, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let mut stmt = conn.prepare("SELECT name, amount, due_date, payday_date FROM archived_smart_bills WHERE id = ?1").unwrap(); let mut rows = stmt.query(params![archive_id]).unwrap(); if let Some(row) = rows.next().unwrap() { let name: String = row.get(0).unwrap(); let amount: f64 = row.get(1).unwrap(); let due: String = row.get(2).unwrap(); let payday: String = row.get(3).unwrap(); let _ = conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date) VALUES (?1, ?2, ?3, ?4)", params![name, amount, due, payday]); let _ = conn.execute("DELETE FROM archived_smart_bills WHERE id = ?1", params![archive_id]); } "SUCCESS: Bill restored to Budget!".to_string() }
+#[tauri::command] fn undo_delete_bill(archive_id: i32, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let mut stmt = conn.prepare("SELECT name, amount, due_date, payday_date, series_id, is_recurring FROM archived_smart_bills WHERE id = ?1").unwrap(); let mut rows = stmt.query(params![archive_id]).unwrap(); if let Some(row) = rows.next().unwrap() { let name: String = row.get(0).unwrap(); let amount: f64 = row.get(1).unwrap(); let due: String = row.get(2).unwrap(); let payday: String = row.get(3).unwrap(); let series_id: i32 = row.get(4).unwrap_or(0); let is_recurring: i32 = row.get(5).unwrap_or(0); let _ = conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, series_id, is_recurring) VALUES (?1, ?2, ?3, ?4, ?5, ?6)", params![name, amount, due, payday, series_id, is_recurring]); let _ = conn.execute("DELETE FROM archived_smart_bills WHERE id = ?1", params![archive_id]); } "SUCCESS: Bill restored to Budget!".to_string() }
 #[tauri::command]
 fn get_sinking_fund_info(bill_id: i32, state: State<'_, AppState>) -> SinkingFundInfo {
     let db = state.db_path.lock().unwrap().clone();
     let conn = Connection::open(&db).unwrap();
-
-    let mut stmt = conn.prepare("SELECT due_date, loan_id FROM smart_bills WHERE id = ?1").unwrap();
+    get_sinking_fund_info_impl(&conn, bill_id)
+}
+fn get_sinking_fund_info_impl(conn: &Connection, bill_id: i32) -> SinkingFundInfo {
+    let mut stmt = conn.prepare("SELECT due_date, loan_id, series_id FROM smart_bills WHERE id = ?1").unwrap();
     let mut rows = stmt.query(params![bill_id]).unwrap();
 
     if let Some(row) = rows.next().unwrap() {
         let due: String = row.get(0).unwrap();
         let bill_loan_id: i32 = row.get(1).unwrap_or(0);
+        let series_id: i32 = row.get(2).unwrap_or(0);
 
-        // Match by loan_id (never confused by similar names) + the exact 15-day relationship
+        // Match by loan_id + series_id (never confused by similar names) + the exact 15-day relationship
         let result = conn.query_row(
             "SELECT pb.account_id, a.name, pb.amount FROM paid_bills pb
              JOIN accounts a ON pb.account_id = a.id
-             WHERE pb.loan_id = ?1 AND pb.name LIKE '%(1st Half)%' AND pb.due_date = date(?2, '-15 days')
+             WHERE pb.loan_id = ?1 AND pb.series_id = ?3 AND pb.name LIKE '%(1st Half)%' AND pb.due_date = date(?2, '-15 days')
              ORDER BY pb.id DESC
              LIMIT 1",
-            params![bill_loan_id, due],
+            params![bill_loan_id, due, series_id],
             |r| Ok(SinkingFundInfo { found: true, account_id: r.get(0)?, account_name: r.get(1)?, amount: r.get(2)? })
         );
 
@@ -478,8 +561,10 @@ fn repair_loan_ids(state: State<'_, AppState>) -> String {
 fn undo_fund_to_savings(paid_bill_id: i32, state: State<'_, AppState>) -> String {
     let db = state.db_path.lock().unwrap().clone();
     let conn = Connection::open(&db).unwrap();
-
-    let mut stmt = conn.prepare("SELECT name, amount, due_date, payday_date, account_id, loan_id, from_account_id FROM paid_bills WHERE id = ?1").unwrap();
+    undo_fund_to_savings_impl(&conn, paid_bill_id)
+}
+fn undo_fund_to_savings_impl(conn: &Connection, paid_bill_id: i32) -> String {
+    let mut stmt = conn.prepare("SELECT name, amount, due_date, payday_date, account_id, loan_id, from_account_id, series_id, is_recurring FROM paid_bills WHERE id = ?1").unwrap();
     let mut rows = stmt.query(params![paid_bill_id]).unwrap();
 
     if let Some(row) = rows.next().unwrap() {
@@ -490,6 +575,8 @@ fn undo_fund_to_savings(paid_bill_id: i32, state: State<'_, AppState>) -> String
         let to_account_id: i32 = row.get(4).unwrap();
         let loan_id: i32 = row.get(5).unwrap_or(0);
         let from_account_id: i32 = row.get(6).unwrap_or(0);
+        let series_id: i32 = row.get(7).unwrap_or(0);
+        let is_recurring: i32 = row.get(8).unwrap_or(0);
 
         // Strip off any "(Handled in X)" tag that may have been appended to the name, to restore the original bill name
         let clean_name = if let Some(idx) = raw_name.find(" (Handled in") { raw_name[..idx].to_string() } else { raw_name.clone() };
@@ -509,7 +596,7 @@ fn undo_fund_to_savings(paid_bill_id: i32, state: State<'_, AppState>) -> String
         let _ = conn.execute("INSERT INTO transactions (account_id, tx_type, amount, description) VALUES (?1, 'INCOME', ?2, ?3)", params![from_account_id, amount, undo_desc]);
 
         // Restore the original bill (clean name, no "Handled in" tag) back to smart_bills
-        let _ = conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id) VALUES (?1, ?2, ?3, ?4, ?5)", params![clean_name, amount, due, payday, loan_id]);
+        let _ = conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id, series_id, is_recurring) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)", params![clean_name, amount, due, payday, loan_id, series_id, is_recurring]);
 
         // Remove this receipt
         let _ = conn.execute("DELETE FROM paid_bills WHERE id = ?1", params![paid_bill_id]);
@@ -540,7 +627,7 @@ fn main() {
             add_smart_bill, get_smart_bills, add_loan, get_loans, delete_loan, pay_bill, get_paid_bills, undo_bill_payment,
             get_archived_loans, undo_delete_loan, delete_bill, get_archived_bills, undo_delete_bill, get_completed_loans, get_sinking_fund_info, repair_loan_ids, update_bill_amount,
             undo_fund_to_savings, undo_transaction, repair_balance_rounding, get_transactions_page, get_paid_bills_page,
-            move_bill_allocation
+            move_bill_allocation, split_recurring_bill
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -636,6 +723,237 @@ mod tests {
         assert_eq!(names(&first), vec!["G4", "G3"]);
         assert_eq!(names(&second), vec!["G2", "G1"]);
         assert_eq!(names(&rest), vec!["G0"]);
+    }
+
+    fn balance_of(conn: &Connection, account_id: i32) -> f64 {
+        conn.query_row("SELECT balance FROM accounts WHERE id = ?1", params![account_id], |r| r.get(0)).unwrap()
+    }
+
+    fn fund_account(conn: &Connection, name: &str, balance: f64) -> i32 {
+        let id = add_account(conn, name);
+        conn.execute("UPDATE accounts SET balance = ?1 WHERE id = ?2", params![balance, id]).unwrap();
+        id
+    }
+
+    // (id, name, amount, due_date, payday_date, is_recurring, series_id), ordered by due date
+    fn unpaid_bills(conn: &Connection) -> Vec<(i32, String, f64, String, String, i32, i32)> {
+        let mut stmt = conn.prepare("SELECT id, name, amount, due_date, payday_date, is_recurring, series_id FROM smart_bills ORDER BY due_date, id").unwrap();
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?))).unwrap();
+        rows.map(|r| r.unwrap()).collect()
+    }
+
+    fn bill_id_named(conn: &Connection, name: &str, due: &str) -> i32 {
+        conn.query_row("SELECT id FROM smart_bills WHERE name = ?1 AND due_date = ?2", params![name, due], |r| r.get(0)).unwrap()
+    }
+
+    fn paid_receipt_id(conn: &Connection, name: &str) -> i32 {
+        conn.query_row("SELECT id FROM paid_bills WHERE name LIKE ?1 ORDER BY id DESC LIMIT 1", params![format!("{}%", name)], |r| r.get(0)).unwrap()
+    }
+
+    #[test]
+    fn split_bill_creates_a_linked_pair() {
+        let conn = test_db();
+        add_smart_bill_impl(&conn, "Internet", 3000.0, "2026-11-20", "2026-10-31", true, true);
+
+        let bills = unpaid_bills(&conn);
+        assert_eq!(bills.len(), 2);
+        let (_, first_name, first_amount, first_due, first_payday, first_recurring, first_series) = &bills[0];
+        let (_, second_name, second_amount, second_due, second_payday, _, second_series) = &bills[1];
+        assert_eq!(first_name, "Internet (1st Half)");
+        assert_eq!(second_name, "Internet (2nd Half (Due))");
+        assert_eq!((*first_amount, *second_amount), (1500.0, 1500.0));
+        assert_eq!(first_due, "2026-11-05", "1st Half is due 15 days before the real due date");
+        assert_eq!(second_due, "2026-11-20");
+        assert_eq!(first_payday, "2026-10-15", "latest payday at least 11 days before Nov 5");
+        assert_eq!(second_payday, "2026-10-31", "2nd Half keeps the paycheck the user picked");
+        assert_eq!(*first_recurring, 1);
+        assert!(*first_series != 0 && first_series == second_series);
+    }
+
+    #[test]
+    fn split_requires_a_recurring_bill() {
+        let conn = test_db();
+        let result = add_smart_bill_impl(&conn, "Gift", 500.0, "2026-11-20", "2026-10-31", false, true);
+        assert!(result.starts_with("ERROR"), "{}", result);
+        assert!(unpaid_bills(&conn).is_empty());
+    }
+
+    #[test]
+    fn each_split_bill_gets_its_own_series() {
+        let conn = test_db();
+        add_smart_bill_impl(&conn, "Internet", 3000.0, "2026-11-20", "2026-10-31", true, true);
+        add_smart_bill_impl(&conn, "Water", 800.0, "2026-11-20", "2026-10-31", true, true);
+        let internet: i32 = conn.query_row("SELECT DISTINCT series_id FROM smart_bills WHERE name LIKE 'Internet%'", [], |r| r.get(0)).unwrap();
+        let water: i32 = conn.query_row("SELECT DISTINCT series_id FROM smart_bills WHERE name LIKE 'Water%'", [], |r| r.get(0)).unwrap();
+        assert_ne!(internet, water);
+    }
+
+    #[test]
+    fn entering_a_split_bill_amount_sets_both_halves() {
+        let conn = test_db();
+        add_smart_bill_impl(&conn, "Electric", 0.0, "2026-11-20", "2026-10-31", true, true);
+
+        // Typing the full amount on either half updates both halves of that month
+        let first = bill_id_named(&conn, "Electric (1st Half)", "2026-11-05");
+        update_bill_amount_impl(&conn, first, 2400.0);
+        assert!(unpaid_bills(&conn).iter().all(|b| b.2 == 1200.0));
+
+        let second = bill_id_named(&conn, "Electric (2nd Half (Due))", "2026-11-20");
+        update_bill_amount_impl(&conn, second, 2001.01);
+        assert!(unpaid_bills(&conn).iter().all(|b| b.2 == 2001.01 / 2.0));
+    }
+
+    #[test]
+    fn funding_then_paying_a_split_bill_charges_the_full_amount_and_rolls_to_next_month() {
+        let conn = test_db();
+        let bank = fund_account(&conn, "Bank", 5000.0);
+        let savings = fund_account(&conn, "Savings", 0.0);
+        add_smart_bill_impl(&conn, "Internet", 3000.0, "2026-11-20", "2026-10-31", true, true);
+
+        // Save the 1st Half to a fund, like a loan's Sinking Fund
+        let first = bill_id_named(&conn, "Internet (1st Half)", "2026-11-05");
+        fund_bill_to_savings_impl(&conn, first, bank, savings, 1500.0, "Funded to Savings: Internet (1st Half)");
+        assert_eq!((balance_of(&conn, bank), balance_of(&conn, savings)), (3500.0, 1500.0));
+
+        // The 2nd Half can find that fund
+        let second = bill_id_named(&conn, "Internet (2nd Half (Due))", "2026-11-20");
+        let info = get_sinking_fund_info_impl(&conn, second);
+        assert!(info.found);
+        assert_eq!((info.account_id, info.amount), (savings, 1500.0));
+
+        // Paying the 2nd Half takes the FULL bill (double the half) from the paying account
+        let result = pay_bill_impl(&conn, second, bank, 1500.0, "Paid: Internet (2nd Half (Due))");
+        assert!(result.starts_with("SUCCESS"), "{}", result);
+        assert_eq!(balance_of(&conn, bank), 500.0);
+
+        // Next month's pair appears as TBD, same series, with the usual paydays
+        let next = unpaid_bills(&conn);
+        let summary: Vec<(String, f64, String, String)> = next.iter().map(|b| (b.1.clone(), b.2, b.3.clone(), b.4.clone())).collect();
+        assert_eq!(summary, vec![
+            ("Internet (1st Half)".to_string(), 0.0, "2026-12-05".to_string(), "2026-11-15".to_string()),
+            ("Internet (2nd Half (Due))".to_string(), 0.0, "2026-12-20".to_string(), "2026-11-30".to_string()),
+        ]);
+        let series: i32 = conn.query_row("SELECT series_id FROM paid_bills WHERE name LIKE 'Internet (2nd%'", [], |r| r.get(0)).unwrap();
+        assert!(next.iter().all(|b| b.6 == series && b.5 == 1));
+    }
+
+    #[test]
+    fn paying_one_split_bill_never_touches_another_due_the_same_day() {
+        let conn = test_db();
+        let bank = fund_account(&conn, "Bank", 10000.0);
+        add_smart_bill_impl(&conn, "Internet", 3000.0, "2026-11-20", "2026-10-31", true, true);
+        add_smart_bill_impl(&conn, "Water", 800.0, "2026-11-20", "2026-10-31", true, true);
+
+        // Pay Internet's 2nd Half without funding its 1st Half: the full amount is charged and Internet's 1st Half is cleared
+        let internet_second = bill_id_named(&conn, "Internet (2nd Half (Due))", "2026-11-20");
+        pay_bill_impl(&conn, internet_second, bank, 1500.0, "Paid: Internet (2nd Half (Due))");
+
+        assert_eq!(balance_of(&conn, bank), 7000.0);
+        let remaining: Vec<String> = unpaid_bills(&conn).iter().filter(|b| b.3.starts_with("2026-11")).map(|b| b.1.clone()).collect();
+        assert_eq!(remaining, vec!["Water (1st Half)", "Water (2nd Half (Due))"], "Water's halves are untouched");
+    }
+
+    #[test]
+    fn undoing_a_split_payment_restores_the_pair_and_removes_next_month() {
+        let conn = test_db();
+        let bank = fund_account(&conn, "Bank", 5000.0);
+        add_smart_bill_impl(&conn, "Internet", 3000.0, "2026-11-20", "2026-10-31", true, true);
+        let before = unpaid_bills(&conn);
+
+        let second = bill_id_named(&conn, "Internet (2nd Half (Due))", "2026-11-20");
+        pay_bill_impl(&conn, second, bank, 1500.0, "Paid: Internet (2nd Half (Due))");
+        let receipt = paid_receipt_id(&conn, "Internet (2nd Half");
+        let result = undo_bill_payment_impl(&conn, receipt);
+        assert!(result.starts_with("SUCCESS"), "{}", result);
+
+        assert_eq!(balance_of(&conn, bank), 5000.0, "full amount refunded");
+        let after = unpaid_bills(&conn);
+        let strip_ids = |bills: &Vec<(i32, String, f64, String, String, i32, i32)>| bills.iter().map(|b| (b.1.clone(), b.2, b.3.clone(), b.4.clone(), b.5, b.6)).collect::<Vec<_>>();
+        assert_eq!(strip_ids(&after), strip_ids(&before), "both halves back, still recurring and linked; next month's TBD pair gone");
+    }
+
+    #[test]
+    fn undoing_a_funded_first_half_keeps_it_linked() {
+        let conn = test_db();
+        let bank = fund_account(&conn, "Bank", 5000.0);
+        let savings = fund_account(&conn, "Savings", 0.0);
+        add_smart_bill_impl(&conn, "Internet", 3000.0, "2026-11-20", "2026-10-31", true, true);
+        let before = unpaid_bills(&conn);
+
+        let first = bill_id_named(&conn, "Internet (1st Half)", "2026-11-05");
+        fund_bill_to_savings_impl(&conn, first, bank, savings, 1500.0, "Funded to Savings: Internet (1st Half)");
+        undo_fund_to_savings_impl(&conn, paid_receipt_id(&conn, "Internet (1st Half"));
+
+        assert_eq!((balance_of(&conn, bank), balance_of(&conn, savings)), (5000.0, 0.0));
+        let after = unpaid_bills(&conn);
+        assert_eq!(after.len(), 2);
+        assert!(after.iter().all(|b| b.5 == 1 && b.6 == before[0].6));
+    }
+
+    #[test]
+    fn existing_recurring_bill_can_be_split() {
+        let conn = test_db();
+        add_smart_bill_impl(&conn, "Rent", 10000.0, "2026-11-20", "2026-10-31", true, false);
+        let rent = bill_id_named(&conn, "Rent", "2026-11-20");
+
+        let result = split_recurring_bill_impl(&conn, rent);
+        assert!(result.starts_with("SUCCESS"), "{}", result);
+
+        let names: Vec<(String, f64, String)> = unpaid_bills(&conn).iter().map(|b| (b.1.clone(), b.2, b.4.clone())).collect();
+        assert_eq!(names, vec![
+            ("Rent (1st Half)".to_string(), 5000.0, "2026-10-15".to_string()),
+            ("Rent (2nd Half (Due))".to_string(), 5000.0, "2026-10-31".to_string()),
+        ]);
+
+        let again = bill_id_named(&conn, "Rent (2nd Half (Due))", "2026-11-20");
+        assert!(split_recurring_bill_impl(&conn, again).starts_with("ERROR"), "can't split twice");
+    }
+
+    #[test]
+    fn only_recurring_non_loan_bills_can_be_split() {
+        let conn = test_db();
+        let one_off = add_bill(&conn, "Gift", 500.0, "2026-11-20", "2026-10-31");
+        assert!(split_recurring_bill_impl(&conn, one_off).starts_with("ERROR"));
+
+        conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id, is_recurring) VALUES ('Car (Due Date)', 5000, '2026-11-20', '2026-10-31', 7, 1)", []).unwrap();
+        let loan_bill = conn.last_insert_rowid() as i32;
+        assert!(split_recurring_bill_impl(&conn, loan_bill).starts_with("ERROR"));
+        assert_eq!(unpaid_bills(&conn).len(), 2, "nothing was changed");
+    }
+
+    #[test]
+    fn regular_recurring_bill_still_rolls_over_as_a_single_bill() {
+        let conn = test_db();
+        let bank = fund_account(&conn, "Bank", 5000.0);
+        add_smart_bill_impl(&conn, "Netflix", 549.0, "2026-11-20", "2026-10-31", true, false);
+        let netflix = bill_id_named(&conn, "Netflix", "2026-11-20");
+
+        pay_bill_impl(&conn, netflix, bank, 549.0, "Paid: Netflix");
+        assert_eq!(balance_of(&conn, bank), 4451.0, "not doubled");
+        let next: Vec<(String, f64, String, String, i32)> = unpaid_bills(&conn).iter().map(|b| (b.1.clone(), b.2, b.3.clone(), b.4.clone(), b.6)).collect();
+        assert_eq!(next, vec![("Netflix".to_string(), 0.0, "2026-12-20".to_string(), "2026-11-30".to_string(), 0)]);
+
+        // Undo brings back this month's bill (still recurring) and removes the auto-created next one
+        undo_bill_payment_impl(&conn, paid_receipt_id(&conn, "Netflix"));
+        let restored: Vec<(String, String, i32)> = unpaid_bills(&conn).iter().map(|b| (b.1.clone(), b.3.clone(), b.5)).collect();
+        assert_eq!(restored, vec![("Netflix".to_string(), "2026-11-20".to_string(), 1)]);
+    }
+
+    #[test]
+    fn loan_sinking_fund_halves_work_as_before() {
+        let conn = test_db();
+        let bank = fund_account(&conn, "Bank", 10000.0);
+        conn.execute("INSERT INTO loans (id, name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure) VALUES (7, 'Car', 12000, 12000, 6, 'Months', 'Bi-Monthly', 2000, '2026-11-20', '', 12000, 'Sinking Fund')", []).unwrap();
+        conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id) VALUES ('Car (1st Half)', 1000, '2026-11-05', '2026-10-15', 7)", []).unwrap();
+        conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id) VALUES ('Car (2nd Half (Due))', 1000, '2026-11-20', '2026-10-31', 7)", []).unwrap();
+        let second = bill_id_named(&conn, "Car (2nd Half (Due))", "2026-11-20");
+
+        pay_bill_impl(&conn, second, bank, 1000.0, "Paid: Car (2nd Half (Due))");
+
+        assert_eq!(balance_of(&conn, bank), 8000.0, "full installment charged");
+        assert!(unpaid_bills(&conn).is_empty(), "1st Half auto-cleared, no recurring copy for loans");
+        let remaining: f64 = conn.query_row("SELECT remaining_balance FROM loans WHERE id = 7", [], |r| r.get(0)).unwrap();
+        assert_eq!(remaining, 10000.0);
     }
 
     #[test]

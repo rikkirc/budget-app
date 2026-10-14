@@ -20,6 +20,7 @@ export default function Budget() {
   const [newBillDue, setNewBillDue] = useState("");
   const [newBillPayday, setNewBillPayday] = useState("");
   const [newBillRecurring, setNewBillRecurring] = useState(false);
+  const [newBillSplit, setNewBillSplit] = useState(false);
   const [editingAmountId, setEditingAmountId] = useState(null);
   const [editAmountValue, setEditAmountValue] = useState("");
   const [movingBillId, setMovingBillId] = useState(null);
@@ -55,8 +56,12 @@ export default function Budget() {
   };
 
   
+  // A split recurring bill (series_id set) is one bill paid in two halves, like a loan's Sinking Fund
+  const isSplitBill = (bill) => bill.series_id > 0;
+
   const isSinkingFundFirstHalf = (bill) => {
     if (!bill.name.includes("(1st Half)")) return false;
+    if (isSplitBill(bill)) return true;
     const loanName = bill.name.split(" (")[0];
     const matchedLoan = loans.find(l => l.name === loanName);
     return matchedLoan ? matchedLoan.due_structure === "Sinking Fund" : true; // default to safe/old behavior if loan not found
@@ -74,14 +79,23 @@ export default function Budget() {
         amount: newBillAmount ? parseFloat(newBillAmount) : 0,
         dueDate: newBillDue,
         paydayDate: newBillPayday,
-        isRecurring: newBillRecurring
+        isRecurring: newBillRecurring,
+        split: newBillRecurring && newBillSplit
     });
-    alert("Success: Bill Added!");
+    alert(newBillRecurring && newBillSplit ? "Success: Bill Added as a 1st Half and 2nd Half (Due)!" : "Success: Bill Added!");
     setNewBillName("");
     setNewBillAmount("");
     setNewBillDue("");
     setNewBillPayday("");
     setNewBillRecurring(false);
+    setNewBillSplit(false);
+    loadData();
+  };
+
+  const handleSplitBill = async (bill) => {
+    if (!window.confirm(`Split "${bill.name}" into two halves?\n\n• 1st Half: due 15 days earlier, saved to a fund\n• 2nd Half (Due): paid on the real due date, taking the full amount\n\nEvery future month will be split too.`)) return;
+    const response = await invoke("split_recurring_bill", { billId: bill.id });
+    alert(response);
     loadData();
   };
 
@@ -256,7 +270,7 @@ export default function Budget() {
                 <input type="text" value={newBillName} onChange={e => setNewBillName(e.target.value)} required placeholder="e.g. Internet" style={{ width: "100%", padding: "10px", borderRadius: "5px", border: "1px solid #ccc" }} />
             </div>
             <div style={{ flex: 1, minWidth: "100px" }}>
-                <label style={{ display: "block", fontSize: "14px", fontWeight: "bold", color: "#4b5563", marginBottom: "5px" }}>Amount (₱) {newBillRecurring && <span style={{ fontWeight: "normal", color: "#9ca3af" }}>(optional)</span>}</label>
+                <label style={{ display: "block", fontSize: "14px", fontWeight: "bold", color: "#4b5563", marginBottom: "5px" }}>{newBillRecurring && newBillSplit ? "Full Amount (₱)" : "Amount (₱)"} {newBillRecurring && <span style={{ fontWeight: "normal", color: "#9ca3af" }}>(optional)</span>}</label>
                 <input type="number" step="0.01" value={newBillAmount} onChange={e => setNewBillAmount(e.target.value)} required={!newBillRecurring} placeholder={newBillRecurring ? "Leave blank for TBD" : "0.00"} style={{ width: "100%", padding: "10px", borderRadius: "5px", border: "1px solid #ccc" }} />
             </div>
             <div style={{ flex: 1, minWidth: "130px" }}>
@@ -264,13 +278,26 @@ export default function Budget() {
                 <input type="date" value={newBillDue} onChange={e => setNewBillDue(e.target.value)} onBlur={e => { if (!isRealDate(e.target.value)) { alert("That date doesn't exist on the calendar! Please pick a valid date."); setNewBillDue(""); } }} required style={{ width: "100%", padding: "10px", borderRadius: "5px", border: "1px solid #ccc" }} />
             </div>
             <div style={{ flex: 1, minWidth: "130px" }}>
-                <label style={{ display: "block", fontSize: "14px", fontWeight: "bold", color: "#4b5563", marginBottom: "5px" }}>Paycheck Allocation</label>
+                <label style={{ display: "block", fontSize: "14px", fontWeight: "bold", color: "#4b5563", marginBottom: "5px" }}>{newBillRecurring && newBillSplit ? "2nd Half Paycheck" : "Paycheck Allocation"}</label>
                 <input type="date" value={newBillPayday} onChange={e => setNewBillPayday(e.target.value)} onBlur={e => { if (!isRealDate(e.target.value)) { alert("That date doesn't exist on the calendar! Please pick a valid date."); setNewBillPayday(""); } }} required style={{ width: "100%", padding: "10px", borderRadius: "5px", border: "1px solid #ccc" }} />
             </div>
             <div style={{ width: "100%", display: "flex", alignItems: "center", gap: "8px", marginTop: "5px" }}>
-                <input type="checkbox" id="recurringCheck" checked={newBillRecurring} onChange={e => setNewBillRecurring(e.target.checked)} style={{ width: "18px", height: "18px", cursor: "pointer" }} />
+                <input type="checkbox" id="recurringCheck" checked={newBillRecurring} onChange={e => { setNewBillRecurring(e.target.checked); if (!e.target.checked) setNewBillSplit(false); }} style={{ width: "18px", height: "18px", cursor: "pointer" }} />
                 <label htmlFor="recurringCheck" style={{ fontSize: "14px", fontWeight: "bold", color: "#4b5563", cursor: "pointer" }}>🔁 Recurring Bill (same day every month)</label>
             </div>
+            {newBillRecurring && (
+                <div style={{ width: "100%", marginLeft: "26px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <input type="checkbox" id="splitCheck" checked={newBillSplit} onChange={e => setNewBillSplit(e.target.checked)} style={{ width: "18px", height: "18px", cursor: "pointer" }} />
+                        <label htmlFor="splitCheck" style={{ fontSize: "14px", fontWeight: "bold", color: "#4b5563", cursor: "pointer" }}>✂️ Split into Bi-Monthly Halves (Sinking Fund)</label>
+                    </div>
+                    {newBillSplit && (
+                        <p style={{ margin: "6px 0 0 26px", fontSize: "12px", color: "#2563eb", fontStyle: "italic" }}>
+                            ℹ️ Creates a 1st Half (due 15 days earlier, saved to a fund from its own paycheck) and a 2nd Half (Due) that pays the full bill on the real due date, just like a Sinking Fund loan.
+                        </p>
+                    )}
+                </div>
+            )}
             <button type="submit" style={{ padding: "10px 20px", backgroundColor: "#10b981", color: "white", border: "none", borderRadius: "5px", cursor: "pointer", fontWeight: "bold", height: "40px" }}>
                 Save Bill
             </button>
@@ -309,27 +336,39 @@ export default function Budget() {
                                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                                     {editingAmountId === bill.id ? (
                                         <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                                            <input type="number" step="0.01" value={editAmountValue} onChange={e => setEditAmountValue(e.target.value)} placeholder="0.00" autoFocus style={{ width: "110px", padding: "6px", borderRadius: "5px", border: "1px solid #9333ea" }} />
+                                            <input type="number" step="0.01" value={editAmountValue} onChange={e => setEditAmountValue(e.target.value)} placeholder={isSplitBill(bill) ? "Full bill" : "0.00"} title={isSplitBill(bill) ? "Enter the FULL bill amount. Each half becomes half of it." : undefined} autoFocus style={{ width: "110px", padding: "6px", borderRadius: "5px", border: "1px solid #9333ea" }} />
                                             <button onClick={() => handleSaveAmount(bill.id)} style={{ padding: "6px 10px", backgroundColor: "#059669", color: "white", border: "none", borderRadius: "5px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}>✓</button>
                                             <button onClick={() => { setEditingAmountId(null); setEditAmountValue(""); }} style={{ padding: "6px 10px", backgroundColor: "#e5e7eb", color: "#4b5563", border: "none", borderRadius: "5px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}>✕</button>
                                         </div>
                                     ) : bill.amount === 0 ? (
                                         <button onClick={() => { setEditingAmountId(bill.id); setEditAmountValue(""); }} style={{ padding: "8px 12px", backgroundColor: "#fef3c7", color: "#92400e", border: "1px solid #fde68a", borderRadius: "5px", cursor: "pointer", fontWeight: "bold", fontSize: "13px" }}>
-                                            ⚠️ TBD — Click to Enter Amount
+                                            {isSplitBill(bill) ? "⚠️ TBD — Enter Full Bill Amount" : "⚠️ TBD — Click to Enter Amount"}
                                         </button>
                                     ) : (
                                         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                            <div style={{ fontWeight: "bold", color: "#dc2626", fontSize: "18px" }}>
-                                                ₱{bill.amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            <div style={{ textAlign: "right" }}>
+                                                <div style={{ fontWeight: "bold", color: "#dc2626", fontSize: "18px" }}>
+                                                    ₱{bill.amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </div>
+                                                {isSplitBill(bill) && (
+                                                    <div style={{ fontSize: "11px", color: "#6b7280" }}>
+                                                        half of ₱{(bill.amount * 2).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    </div>
+                                                )}
                                             </div>
                                             {bill.is_recurring && (
-                                                <button onClick={() => { setEditingAmountId(bill.id); setEditAmountValue(bill.amount.toString()); }} style={{ padding: "4px 8px", backgroundColor: "#f3f4f6", color: "#6b7280", border: "1px solid #d1d5db", borderRadius: "4px", cursor: "pointer", fontSize: "11px" }}>
+                                                <button onClick={() => { setEditingAmountId(bill.id); setEditAmountValue((isSplitBill(bill) ? bill.amount * 2 : bill.amount).toString()); }} style={{ padding: "4px 8px", backgroundColor: "#f3f4f6", color: "#6b7280", border: "1px solid #d1d5db", borderRadius: "4px", cursor: "pointer", fontSize: "11px" }}>
                                                     ✏️ Edit
                                                 </button>
                                             )}
                                         </div>
                                     )}
-                                    {bill.is_recurring && <span style={{ fontSize: "16px" }} title="Recurring bill">🔁</span>}
+                                    {bill.is_recurring && <span style={{ fontSize: "16px" }} title={isSplitBill(bill) ? "Recurring bill, split into halves" : "Recurring bill"}>{isSplitBill(bill) ? "🔁✂️" : "🔁"}</span>}
+                                    {bill.is_recurring && bill.loan_id === 0 && !isSplitBill(bill) && (
+                                        <button onClick={() => handleSplitBill(bill)} title="Split into a 1st Half and 2nd Half (Due)" style={{ padding: "8px 12px", backgroundColor: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe", borderRadius: "5px", cursor: "pointer", fontWeight: "bold" }}>
+                                            ✂️ Split
+                                        </button>
+                                    )}
                                     <button onClick={() => handleDeleteBill(bill.id)} style={{ padding: "8px 12px", backgroundColor: "#ef4444", color: "white", border: "none", borderRadius: "5px", cursor: "pointer", fontWeight: "bold" }}>
                                         🗑️ Delete
                                     </button>
