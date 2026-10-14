@@ -79,13 +79,19 @@ fn init_schema(conn: &Connection) {
     let _ = conn.execute_batch("CREATE TRIGGER IF NOT EXISTS set_tx_timestamp AFTER INSERT ON transactions WHEN NEW.created_at = '' BEGIN UPDATE transactions SET created_at = datetime('now','localtime') WHERE id = NEW.id; END;");
 }
 
+// Money moves in whole centavos. Sinking Fund halves can be half-centavos (412.35 / 2 = 206.175); rounding each account's
+// balance separately could then round one side up and the other down, creating or losing ₱0.01. So every amount is rounded
+// ONCE here, before it touches any account, and that same rounded amount is applied to both sides and logged.
+fn round_to_centavo(amount: f64) -> f64 { (amount * 100.0).round() / 100.0 }
+
 // 🚨 UPDATED: Every single command now asks the Receptionist which safe to open!
 #[tauri::command] fn add_account(name: &str, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); match conn.execute("INSERT INTO accounts (name, balance) VALUES (?1, 0.0)", params![name]) { Ok(_) => format!("SUCCESS: Created new account '{}'!", name), Err(_) => "ERROR: Account might already exist.".to_string() } }
 #[tauri::command] fn get_accounts(state: State<'_, AppState>) -> Vec<Account> { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let mut stmt = conn.prepare("SELECT id, name, balance FROM accounts").unwrap(); let iter = stmt.query_map([], |row| { Ok(Account { id: row.get(0).unwrap_or(0), name: row.get(1).unwrap_or_else(|_| "".to_string()), balance: row.get(2).unwrap_or(0.0) }) }).unwrap(); let mut accounts = Vec::new(); for a in iter { if let Ok(acc) = a { accounts.push(acc); } } accounts }
 #[tauri::command] fn delete_account(account_id: i32, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let balance: f64 = conn.query_row("SELECT balance FROM accounts WHERE id = ?1", params![account_id], |row| row.get(0)).unwrap_or(0.0); if balance > 0.0 { return format!("ERROR: You cannot delete an account that still holds money. Please transfer the remaining ₱{:.2} first!", balance); } let name: String = conn.query_row("SELECT name FROM accounts WHERE id = ?1", params![account_id], |row| row.get(0)).unwrap_or_else(|_| "".to_string()); let _ = conn.execute("INSERT INTO archived_accounts (original_id, name) VALUES (?1, ?2)", params![account_id, name]); let _ = conn.execute("DELETE FROM accounts WHERE id = ?1", params![account_id]); "SUCCESS: Empty account safely moved to the Recycle Bin!".to_string() }
-#[tauri::command] fn log_income(account_id: i32, amount: f64, description: &str, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let _ = conn.execute("UPDATE accounts SET balance = ROUND(balance + ?1, 2) WHERE id = ?2", params![amount, account_id]); let _ = conn.execute("INSERT INTO transactions (account_id, tx_type, amount, description) VALUES (?1, 'INCOME', ?2, ?3)", params![account_id, amount, description]); "SUCCESS!".to_string() }
-#[tauri::command] fn log_expense(account_id: i32, amount: f64, description: &str, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let _ = conn.execute("UPDATE accounts SET balance = ROUND(balance - ?1, 2) WHERE id = ?2", params![amount, account_id]); let _ = conn.execute("INSERT INTO transactions (account_id, tx_type, amount, description) VALUES (?1, 'EXPENSE', ?2, ?3)", params![account_id, amount, description]); "SUCCESS!".to_string() }
-#[tauri::command] fn transfer_money(from_account_id: i32, to_account_id: i32, amount: f64, description: &str, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let current_balance: f64 = conn.query_row("SELECT balance FROM accounts WHERE id = ?1", params![from_account_id], |r| r.get(0)).unwrap_or(0.0); if current_balance < (amount - 0.01) { return format!("ERROR: Insufficient funds! Source account only has ₱{:.2}, but the transfer needs ₱{:.2}.", current_balance, amount); } let _ = conn.execute("UPDATE accounts SET balance = ROUND(balance - ?1, 2) WHERE id = ?2", params![amount, from_account_id]); let _ = conn.execute("UPDATE accounts SET balance = ROUND(balance + ?1, 2) WHERE id = ?2", params![amount, to_account_id]); let _ = conn.execute("INSERT INTO transactions (account_id, tx_type, amount, description) VALUES (?1, 'TRANSFER_OUT', ?2, ?3)", params![from_account_id, amount, description]); let out_id = conn.last_insert_rowid(); let _ = conn.execute("INSERT INTO transactions (account_id, tx_type, amount, description, linked_id) VALUES (?1, 'TRANSFER_IN', ?2, ?3, ?4)", params![to_account_id, amount, description, out_id]); let in_id = conn.last_insert_rowid(); let _ = conn.execute("UPDATE transactions SET linked_id = ?1 WHERE id = ?2", params![in_id, out_id]); "SUCCESS!".to_string() }
+#[tauri::command] fn log_income(account_id: i32, amount: f64, description: &str, state: State<'_, AppState>) -> String { let amount = round_to_centavo(amount); let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let _ = conn.execute("UPDATE accounts SET balance = ROUND(balance + ?1, 2) WHERE id = ?2", params![amount, account_id]); let _ = conn.execute("INSERT INTO transactions (account_id, tx_type, amount, description) VALUES (?1, 'INCOME', ?2, ?3)", params![account_id, amount, description]); "SUCCESS!".to_string() }
+#[tauri::command] fn log_expense(account_id: i32, amount: f64, description: &str, state: State<'_, AppState>) -> String { let amount = round_to_centavo(amount); let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let _ = conn.execute("UPDATE accounts SET balance = ROUND(balance - ?1, 2) WHERE id = ?2", params![amount, account_id]); let _ = conn.execute("INSERT INTO transactions (account_id, tx_type, amount, description) VALUES (?1, 'EXPENSE', ?2, ?3)", params![account_id, amount, description]); "SUCCESS!".to_string() }
+#[tauri::command] fn transfer_money(from_account_id: i32, to_account_id: i32, amount: f64, description: &str, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); transfer_money_impl(&conn, from_account_id, to_account_id, amount, description) }
+fn transfer_money_impl(conn: &Connection, from_account_id: i32, to_account_id: i32, amount: f64, description: &str) -> String { let amount = round_to_centavo(amount); let current_balance: f64 = conn.query_row("SELECT balance FROM accounts WHERE id = ?1", params![from_account_id], |r| r.get(0)).unwrap_or(0.0); if current_balance < (amount - 0.01) { return format!("ERROR: Insufficient funds! Source account only has ₱{:.2}, but the transfer needs ₱{:.2}.", current_balance, amount); } let _ = conn.execute("UPDATE accounts SET balance = ROUND(balance - ?1, 2) WHERE id = ?2", params![amount, from_account_id]); let _ = conn.execute("UPDATE accounts SET balance = ROUND(balance + ?1, 2) WHERE id = ?2", params![amount, to_account_id]); let _ = conn.execute("INSERT INTO transactions (account_id, tx_type, amount, description) VALUES (?1, 'TRANSFER_OUT', ?2, ?3)", params![from_account_id, amount, description]); let out_id = conn.last_insert_rowid(); let _ = conn.execute("INSERT INTO transactions (account_id, tx_type, amount, description, linked_id) VALUES (?1, 'TRANSFER_IN', ?2, ?3, ?4)", params![to_account_id, amount, description, out_id]); let in_id = conn.last_insert_rowid(); let _ = conn.execute("UPDATE transactions SET linked_id = ?1 WHERE id = ?2", params![in_id, out_id]); "SUCCESS!".to_string() }
 #[tauri::command]
 fn undo_transaction(transaction_id: i32, state: State<'_, AppState>) -> String {
     let db = state.db_path.lock().unwrap().clone();
@@ -97,7 +103,7 @@ fn undo_transaction(transaction_id: i32, state: State<'_, AppState>) -> String {
     if let Some(row) = rows.next().unwrap() {
         let account_id: i32 = row.get(0).unwrap();
         let tx_type: String = row.get(1).unwrap();
-        let amount: f64 = row.get(2).unwrap();
+        let amount: f64 = round_to_centavo(row.get(2).unwrap());
         let already_reversed: i32 = row.get(3).unwrap_or(0);
         let linked_id: Option<i32> = row.get(4).unwrap_or(None);
 
@@ -120,7 +126,7 @@ fn undo_transaction(transaction_id: i32, state: State<'_, AppState>) -> String {
             if let Some(p_row) = p_rows.next().unwrap() {
                 let p_account_id: i32 = p_row.get(0).unwrap();
                 let p_tx_type: String = p_row.get(1).unwrap();
-                let p_amount: f64 = p_row.get(2).unwrap();
+                let p_amount: f64 = round_to_centavo(p_row.get(2).unwrap());
                 let p_already_reversed: i32 = p_row.get(3).unwrap_or(0);
 
                 if p_already_reversed == 0 {
@@ -227,6 +233,8 @@ fn fund_bill_to_savings(bill_id: i32, from_account_id: i32, to_account_id: i32, 
     fund_bill_to_savings_impl(&conn, bill_id, from_account_id, to_account_id, amount, description)
 }
 fn fund_bill_to_savings_impl(conn: &Connection, bill_id: i32, from_account_id: i32, to_account_id: i32, amount: f64, description: &str) -> String {
+    // Also stored on the receipt, so the later auto-transfer and Undo move exactly what was funded
+    let amount = round_to_centavo(amount);
     // 1. Get bill details (now also grabbing loan_id!)
     let mut stmt = conn.prepare("SELECT name, due_date, payday_date, loan_id, series_id, is_recurring FROM smart_bills WHERE id = ?1").unwrap();
     let mut rows = stmt.query(params![bill_id]).unwrap();
@@ -298,7 +306,7 @@ fn pay_bill_impl(conn: &Connection, bill_id: i32, account_id: i32, amount: f64, 
         let is_sinking_fund_second_half = due_structure == "Sinking Fund" && (bill_name.contains("(2nd Half (Due))") || bill_name.contains("(2nd Half)"));
 
         // This is the REAL amount that should leave the account AND come off the loan balance
-        let real_amount: f64 = if is_sinking_fund_second_half { amount * 2.0 } else { amount };
+        let real_amount: f64 = round_to_centavo(if is_sinking_fund_second_half { amount * 2.0 } else { amount });
 
         // 🛡️ SAFETY CHECK: Does this account actually have enough for the REAL amount owed?
         let current_balance: f64 = conn.query_row(
@@ -353,7 +361,7 @@ fn pay_bill_impl(conn: &Connection, bill_id: i32, account_id: i32, amount: f64, 
         }
 
         // Loan's remaining balance drops by the same REAL amount that left the account — matched by ID, not name
-        let _ = conn.execute("UPDATE loans SET remaining_balance = remaining_balance - ?1 WHERE id = ?2", params![real_amount, bill_loan_id]);
+        let _ = conn.execute("UPDATE loans SET remaining_balance = ROUND(remaining_balance - ?1, 2) WHERE id = ?2", params![real_amount, bill_loan_id]);
 
         // Check if this payment fully paid off the loan. If so, graduate it to Completed Loans!
         let mut check_stmt = conn.prepare("SELECT id, principal, remaining_balance, term, term_type, frequency, payment_amount, total_incurred FROM loans WHERE id = ?1").unwrap();
@@ -408,7 +416,7 @@ fn undo_bill_payment_impl(conn: &Connection, paid_bill_id: i32) -> String {
         ).unwrap_or_else(|_| "Sinking Fund".to_string());
 
         let is_sinking_fund_second_half = due_structure == "Sinking Fund" && (name.contains("(2nd Half (Due))") || name.contains("(2nd Half)"));
-        let real_amount: f64 = if is_sinking_fund_second_half { amount * 2.0 } else { amount };
+        let real_amount: f64 = round_to_centavo(if is_sinking_fund_second_half { amount * 2.0 } else { amount });
 
         // 1. Refund the REAL amount back to the account it was taken from
         let _ = conn.execute("UPDATE accounts SET balance = ROUND(balance + ?1, 2) WHERE id = ?2", params![real_amount, account_id]);
@@ -418,7 +426,7 @@ fn undo_bill_payment_impl(conn: &Connection, paid_bill_id: i32) -> String {
         // 2. If this loan still exists (wasn't graduated to Completed), restore its remaining_balance
         let loan_exists: bool = conn.query_row("SELECT 1 FROM loans WHERE id = ?1", params![loan_id], |_| Ok(true)).unwrap_or(false);
         if loan_exists {
-            let _ = conn.execute("UPDATE loans SET remaining_balance = remaining_balance + ?1 WHERE id = ?2", params![real_amount, loan_id]);
+            let _ = conn.execute("UPDATE loans SET remaining_balance = ROUND(remaining_balance + ?1, 2) WHERE id = ?2", params![real_amount, loan_id]);
         } else {
             // The loan was graduated to Completed Loans by this exact payment — bring it back to Active Loans
             let mut cl_stmt = conn.prepare("SELECT original_id, name, principal, term, term_type, frequency, payment_amount, total_incurred FROM completed_loans WHERE original_id = ?1 ORDER BY id DESC LIMIT 1").unwrap();
@@ -569,7 +577,7 @@ fn undo_fund_to_savings_impl(conn: &Connection, paid_bill_id: i32) -> String {
 
     if let Some(row) = rows.next().unwrap() {
         let raw_name: String = row.get(0).unwrap();
-        let amount: f64 = row.get(1).unwrap();
+        let amount: f64 = round_to_centavo(row.get(1).unwrap());
         let due: String = row.get(2).unwrap();
         let payday: String = row.get(3).unwrap();
         let to_account_id: i32 = row.get(4).unwrap();
@@ -954,6 +962,71 @@ mod tests {
         assert!(unpaid_bills(&conn).is_empty(), "1st Half auto-cleared, no recurring copy for loans");
         let remaining: f64 = conn.query_row("SELECT remaining_balance FROM loans WHERE id = 7", [], |r| r.get(0)).unwrap();
         assert_eq!(remaining, 10000.0);
+    }
+
+    fn cents(x: f64) -> i64 { (x * 100.0).round() as i64 }
+
+    // Sinking Fund halves of odd-cent installments are half-cents (e.g. 412.35 / 2 = 206.175).
+    // Moving one between accounts must never create or lose a centavo.
+    #[test]
+    fn funding_half_cent_amounts_never_creates_or_loses_money() {
+        let mut failures = Vec::new();
+        for start_cents in [100_000_i64, 123_456, 50_001, 99_999, 7_777_777] {
+            for odd_installment in (1..400).step_by(2) {
+                let conn = test_db();
+                let start = start_cents as f64 / 100.0;
+                let bank = fund_account(&conn, "Bank", start);
+                let savings = fund_account(&conn, "Savings", 0.0);
+                let half = (odd_installment as f64 + 41_234.0) / 200.0;
+                add_bill(&conn, "Loan (1st Half)", half, "2026-11-05", "2026-10-15");
+                let bill = bill_id_named(&conn, "Loan (1st Half)", "2026-11-05");
+
+                fund_bill_to_savings_impl(&conn, bill, bank, savings, half, "Funded");
+
+                let total = cents(balance_of(&conn, bank)) + cents(balance_of(&conn, savings));
+                if total != start_cents { failures.push((start, half, total - start_cents)); }
+            }
+        }
+        assert!(failures.is_empty(), "{} transfers changed the total, e.g. (start, amount, centavos created) {:?}", failures.len(), &failures[..failures.len().min(3)]);
+    }
+
+    #[test]
+    fn full_sinking_fund_cycle_with_odd_centavo_installment_balances_exactly() {
+        let conn = test_db();
+        let bank = fund_account(&conn, "Bank", 1000.0);
+        let savings = fund_account(&conn, "Savings", 0.0);
+        conn.execute("INSERT INTO loans (id, name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure) VALUES (7, 'Gotyme', 412.35, 412.35, 1, 'Months', 'Bi-Monthly', 412.35, '2026-11-20', '', 412.35, 'Sinking Fund')", []).unwrap();
+        conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id) VALUES ('Gotyme (1st Half)', 206.175, '2026-11-05', '2026-10-15', 7)", []).unwrap();
+        conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id) VALUES ('Gotyme (2nd Half (Due))', 206.175, '2026-11-20', '2026-10-31', 7)", []).unwrap();
+
+        // Same steps the Budget screen performs
+        let first = bill_id_named(&conn, "Gotyme (1st Half)", "2026-11-05");
+        fund_bill_to_savings_impl(&conn, first, bank, savings, 206.175, "Funded to Savings: Gotyme (1st Half)");
+        let second = bill_id_named(&conn, "Gotyme (2nd Half (Due))", "2026-11-20");
+        let fund = get_sinking_fund_info_impl(&conn, second);
+        transfer_money_impl(&conn, fund.account_id, bank, fund.amount, "Auto-Transfer: Sinking Fund");
+        pay_bill_impl(&conn, second, bank, 206.175, "Paid: Gotyme (2nd Half (Due))");
+
+        assert_eq!(cents(balance_of(&conn, bank)) + cents(balance_of(&conn, savings)), 100_000 - 41_235, "exactly ₱412.35 left the accounts");
+        assert_eq!(cents(balance_of(&conn, savings)), 0, "the fund was fully used");
+        let completed: i32 = conn.query_row("SELECT COUNT(*) FROM completed_loans WHERE original_id = 7", [], |r| r.get(0)).unwrap();
+        assert_eq!(completed, 1, "loan paid off exactly and graduated");
+    }
+
+    #[test]
+    fn transactions_are_recorded_to_the_centavo() {
+        let conn = test_db();
+        let bank = fund_account(&conn, "Bank", 1000.0);
+        let savings = fund_account(&conn, "Savings", 0.0);
+        add_bill(&conn, "Loan (1st Half)", 206.175, "2026-11-05", "2026-10-15");
+        let bill = bill_id_named(&conn, "Loan (1st Half)", "2026-11-05");
+
+        fund_bill_to_savings_impl(&conn, bill, bank, savings, 206.175, "Funded");
+
+        let amounts: Vec<f64> = conn.prepare("SELECT amount FROM transactions").unwrap().query_map([], |r| r.get(0)).unwrap().map(|r| r.unwrap()).collect();
+        assert!(amounts.iter().all(|a| (a * 100.0 - (a * 100.0).round()).abs() < 1e-9), "sub-centavo amount logged: {:?}", amounts);
+        assert_eq!(amounts[0], amounts[1], "both sides of a transfer log the same amount");
+        assert_eq!(balance_of(&conn, savings), amounts[0], "the logged amount is what actually moved");
     }
 
     #[test]
