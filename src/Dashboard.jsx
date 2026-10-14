@@ -35,6 +35,9 @@ export default function Dashboard() {
     setAllBills(sortedBills);
   };
 
+  const upcomingTotal = upcomingBills.reduce((sum, bill) => sum + bill.amount, 0);
+  const upcomingTbdCount = upcomingBills.filter(bill => bill.amount === 0).length;
+
   const formatDate = (dateStr) => {
     if (!dateStr) return "";
     const [year, month, day] = dateStr.split('-');
@@ -68,8 +71,18 @@ export default function Dashboard() {
 
       {/* 📅 The Urgent Bills Alert */}
       <div>
-        <h3 style={{ color: "#1f2937", borderBottom: "2px solid #e5e7eb", paddingBottom: "10px", marginBottom: "20px" }}>
-          📅 Next 5 Upcoming Bills
+        <h3 style={{ color: "#1f2937", borderBottom: "2px solid #e5e7eb", paddingBottom: "10px", marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "10px" }}>
+          <span>📅 Next {upcomingBills.length || 5} Upcoming Bills</span>
+          {upcomingBills.length > 0 && (
+            <span style={{ fontSize: "16px", color: "#4b5563" }}>
+              Total: <span style={{ color: "#dc2626", fontSize: "20px" }}>₱{upcomingTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              {upcomingTbdCount > 0 && (
+                <span style={{ fontSize: "12px", fontWeight: "normal", color: "#92400e", marginLeft: "8px" }}>
+                  + {upcomingTbdCount} TBD {upcomingTbdCount === 1 ? "bill" : "bills"} not yet included
+                </span>
+              )}
+            </span>
+          )}
         </h3>
         
         {upcomingBills.length === 0 ? (
@@ -83,8 +96,8 @@ export default function Dashboard() {
                   <div style={{ color: "#dc2626", fontSize: "14px", marginTop: "5px" }}>Due: {formatDate(bill.due_date)}</div>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
-                    <div style={{ fontWeight: "bold", color: "#dc2626", fontSize: "18px" }}>
-                    ₱{bill.amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    <div style={{ fontWeight: "bold", color: bill.amount === 0 ? "#f59e0b" : "#dc2626", fontSize: "18px" }}>
+                    {bill.amount === 0 ? "TBD" : `₱${bill.amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                     </div>
                     <div style={{ color: "#6b7280", fontSize: "12px", marginTop: "3px" }}>Allocated to: {formatDate(bill.payday_date)} Paycheck</div>
                 </div>
