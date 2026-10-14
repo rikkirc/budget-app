@@ -25,6 +25,18 @@ To build an installer:
 npm run tauri build
 ```
 
+## Running tests
+
+```bash
+npm test
+```
+
+runs the frontend logic tests (search). The backend tests run against throwaway in-memory databases, never your real vaults:
+
+```bash
+cd src-tauri && cargo test
+```
+
 ## Your data
 
 When you unlock a vault, the app creates `<profile_name>_finance_data.db` in `Documents\FinancialCommandCenter\`. These files hold your personal financial data and live outside the repo, so back that folder up separately. `.gitignore` also excludes any stray `*.db` files so they are never committed.

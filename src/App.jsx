@@ -3,7 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import Dashboard from "./Dashboard";
 import Budget from "./Budget";
 import Debt from "./Debt";
-import CashFlow from "./CashFlow"; 
+import CashFlow from "./CashFlow";
+import Search from "./Search";
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -95,6 +96,7 @@ export default function App() {
           <button onClick={() => setActiveTab("CashFlow")} style={{ padding: "12px 24px", cursor: "pointer", fontWeight: "bold", fontSize: "16px", backgroundColor: activeTab === "CashFlow" ? "#047857" : "#e5e7eb", color: activeTab === "CashFlow" ? "white" : "#374151", border: "none", borderRadius: "5px", transition: "0.2s" }}>💰 Cash Flow</button>
           <button onClick={() => setActiveTab("Budget")} style={{ padding: "12px 24px", cursor: "pointer", fontWeight: "bold", fontSize: "16px", backgroundColor: activeTab === "Budget" ? "#2563eb" : "#e5e7eb", color: activeTab === "Budget" ? "white" : "#374151", border: "none", borderRadius: "5px", transition: "0.2s" }}>📅 Bi-Monthly Budget</button>
           <button onClick={() => setActiveTab("Debt")} style={{ padding: "12px 24px", cursor: "pointer", fontWeight: "bold", fontSize: "16px", backgroundColor: activeTab === "Debt" ? "#9333ea" : "#e5e7eb", color: activeTab === "Debt" ? "white" : "#374151", border: "none", borderRadius: "5px", transition: "0.2s" }}>📉 Loan Generator</button>
+          <button onClick={() => setActiveTab("Search")} style={{ padding: "12px 24px", cursor: "pointer", fontWeight: "bold", fontSize: "16px", backgroundColor: activeTab === "Search" ? "#4f46e5" : "#e5e7eb", color: activeTab === "Search" ? "white" : "#374151", border: "none", borderRadius: "5px", transition: "0.2s" }}>🔍 Search</button>
         </div>
 
         {/* 🚨 NEW: The Profile Name Tag sits right next to the Log Out button! */}
@@ -117,6 +119,7 @@ export default function App() {
         {activeTab === "CashFlow" && <CashFlow key={refreshKey} />}
         {activeTab === "Budget" && <Budget key={refreshKey} />}
         {activeTab === "Debt" && <Debt key={refreshKey} />}
+        {activeTab === "Search" && <Search key={refreshKey} onNavigate={setActiveTab} />}
       </div>
       
     </div>
