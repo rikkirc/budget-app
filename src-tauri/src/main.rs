@@ -131,7 +131,9 @@ fn undo_transaction(transaction_id: i32, state: State<'_, AppState>) -> String {
     "SUCCESS: Transaction undone!".to_string()
 }
 #[tauri::command] fn get_all_transactions(state: State<'_, AppState>) -> Vec<TransactionLog> { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let mut stmt = conn.prepare("SELECT t.id, a.name, t.tx_type, t.amount, t.description, t.is_reversed, t.created_at, COALESCE(pa.name, '') FROM transactions t JOIN accounts a ON t.account_id = a.id LEFT JOIN transactions p ON t.linked_id = p.id LEFT JOIN accounts pa ON p.account_id = pa.id ORDER BY t.id DESC").unwrap(); let iter = stmt.query_map([], |row| { let reversed_int: i32 = row.get(5).unwrap_or(0); Ok(TransactionLog { id: row.get(0).unwrap_or(0), account_name: row.get(1).unwrap_or_else(|_| "".to_string()), tx_type: row.get(2).unwrap_or_else(|_| "".to_string()), amount: row.get(3).unwrap_or(0.0), description: row.get(4).unwrap_or_else(|_| "".to_string()), is_reversed: reversed_int != 0, created_at: row.get(6).unwrap_or_else(|_| "".to_string()), linked_account_name: row.get(7).unwrap_or_else(|_| "".to_string()) }) }).unwrap(); let mut logs = Vec::new(); for t in iter { if let Ok(l) = t { logs.push(l); } } logs }
-#[tauri::command] fn get_transactions_page(offset: i32, limit: i32, state: State<'_, AppState>) -> Vec<TransactionLog> { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let mut stmt = conn.prepare("SELECT t.id, a.name, t.tx_type, t.amount, t.description, t.is_reversed, t.created_at, COALESCE(pa.name, '') FROM transactions t JOIN accounts a ON t.account_id = a.id LEFT JOIN transactions p ON t.linked_id = p.id LEFT JOIN accounts pa ON p.account_id = pa.id ORDER BY t.id DESC LIMIT ?1 OFFSET ?2").unwrap(); let iter = stmt.query_map(params![limit, offset], |row| { let reversed_int: i32 = row.get(5).unwrap_or(0); Ok(TransactionLog { id: row.get(0).unwrap_or(0), account_name: row.get(1).unwrap_or_else(|_| "".to_string()), tx_type: row.get(2).unwrap_or_else(|_| "".to_string()), amount: row.get(3).unwrap_or(0.0), description: row.get(4).unwrap_or_else(|_| "".to_string()), is_reversed: reversed_int != 0, created_at: row.get(6).unwrap_or_else(|_| "".to_string()), linked_account_name: row.get(7).unwrap_or_else(|_| "".to_string()) }) }).unwrap(); let mut logs = Vec::new(); for t in iter { if let Ok(l) = t { logs.push(l); } } logs }
+// account_id = None returns the complete history across all accounts; Some(id) returns only that account's entries
+#[tauri::command] fn get_transactions_page(offset: i32, limit: i32, account_id: Option<i32>, state: State<'_, AppState>) -> Vec<TransactionLog> { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); get_transactions_page_impl(&conn, offset, limit, account_id) }
+fn get_transactions_page_impl(conn: &Connection, offset: i32, limit: i32, account_id: Option<i32>) -> Vec<TransactionLog> { let mut stmt = conn.prepare("SELECT t.id, a.name, t.tx_type, t.amount, t.description, t.is_reversed, t.created_at, COALESCE(pa.name, '') FROM transactions t JOIN accounts a ON t.account_id = a.id LEFT JOIN transactions p ON t.linked_id = p.id LEFT JOIN accounts pa ON p.account_id = pa.id WHERE (?3 IS NULL OR t.account_id = ?3) ORDER BY t.id DESC LIMIT ?1 OFFSET ?2").unwrap(); let iter = stmt.query_map(params![limit, offset, account_id], |row| { let reversed_int: i32 = row.get(5).unwrap_or(0); Ok(TransactionLog { id: row.get(0).unwrap_or(0), account_name: row.get(1).unwrap_or_else(|_| "".to_string()), tx_type: row.get(2).unwrap_or_else(|_| "".to_string()), amount: row.get(3).unwrap_or(0.0), description: row.get(4).unwrap_or_else(|_| "".to_string()), is_reversed: reversed_int != 0, created_at: row.get(6).unwrap_or_else(|_| "".to_string()), linked_account_name: row.get(7).unwrap_or_else(|_| "".to_string()) }) }).unwrap(); let mut logs = Vec::new(); for t in iter { if let Ok(l) = t { logs.push(l); } } logs }
 #[tauri::command] fn add_smart_bill(name: &str, amount: f64, due_date: &str, payday_date: &str, is_recurring: bool, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); match conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, is_recurring) VALUES (?1, ?2, ?3, ?4, ?5)", params![name, amount, due_date, payday_date, is_recurring as i32]) { Ok(_) => "SUCCESS!".to_string(), Err(_) => "ERROR".to_string() } }
 #[tauri::command] fn update_bill_amount(bill_id: i32, new_amount: f64, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); match conn.execute("UPDATE smart_bills SET amount = ?1 WHERE id = ?2", params![new_amount, bill_id]) { Ok(_) => "SUCCESS: Amount updated!".to_string(), Err(_) => "ERROR: Could not update amount".to_string() } }
 // Reassign one unpaid bill to a different paycheck allocation (only this occurrence; next month's recurring copy still uses the normal payday rule)
@@ -587,6 +589,53 @@ mod tests {
             assert!(result.starts_with("ERROR"), "{} should be rejected", bad);
         }
         assert_eq!(payday_of(&conn, internet), "2026-11-15");
+    }
+
+    fn add_account(conn: &Connection, name: &str) -> i32 {
+        conn.execute("INSERT INTO accounts (name, balance) VALUES (?1, 0.0)", params![name]).unwrap();
+        conn.last_insert_rowid() as i32
+    }
+
+    fn add_tx(conn: &Connection, account_id: i32, tx_type: &str, amount: f64, description: &str) {
+        conn.execute("INSERT INTO transactions (account_id, tx_type, amount, description) VALUES (?1, ?2, ?3, ?4)", params![account_id, tx_type, amount, description]).unwrap();
+    }
+
+    #[test]
+    fn transaction_history_can_be_filtered_per_account() {
+        let conn = test_db();
+        let gcash = add_account(&conn, "GCash");
+        let bpi = add_account(&conn, "BPI");
+        add_tx(&conn, gcash, "INCOME", 1000.0, "Salary");
+        add_tx(&conn, bpi, "EXPENSE", 200.0, "Groceries");
+        add_tx(&conn, gcash, "EXPENSE", 50.0, "Load");
+
+        let gcash_only = get_transactions_page_impl(&conn, 0, 50, Some(gcash));
+        let descriptions: Vec<&str> = gcash_only.iter().map(|t| t.description.as_str()).collect();
+        assert_eq!(descriptions, vec!["Load", "Salary"], "newest first, GCash only");
+        assert!(gcash_only.iter().all(|t| t.account_name == "GCash"));
+
+        let everything = get_transactions_page_impl(&conn, 0, 50, None);
+        assert_eq!(everything.len(), 3, "None returns the complete history");
+    }
+
+    #[test]
+    fn per_account_history_pages_within_that_account() {
+        let conn = test_db();
+        let gcash = add_account(&conn, "GCash");
+        let bpi = add_account(&conn, "BPI");
+        for i in 0..5 {
+            add_tx(&conn, gcash, "INCOME", 1.0, &format!("G{}", i));
+            add_tx(&conn, bpi, "INCOME", 1.0, &format!("B{}", i));
+        }
+
+        let first = get_transactions_page_impl(&conn, 0, 2, Some(gcash));
+        let second = get_transactions_page_impl(&conn, 2, 2, Some(gcash));
+        let rest = get_transactions_page_impl(&conn, 4, 2, Some(gcash));
+
+        let names = |page: &Vec<TransactionLog>| page.iter().map(|t| t.description.clone()).collect::<Vec<_>>();
+        assert_eq!(names(&first), vec!["G4", "G3"]);
+        assert_eq!(names(&second), vec!["G2", "G1"]);
+        assert_eq!(names(&rest), vec!["G0"]);
     }
 
     #[test]

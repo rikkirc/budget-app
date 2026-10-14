@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 export default function CashFlow() {
@@ -17,25 +17,45 @@ export default function CashFlow() {
   const [hasMoreTx, setHasMoreTx] = useState(true);
   const TX_PAGE_SIZE = 50;
 
+  // Which history to show: an account id, or "ALL" for the complete history. null = not picked yet (defaults to the first account)
+  const [historyFilter, setHistoryFilter] = useState(null);
+  const [accountsLoaded, setAccountsLoaded] = useState(false);
+  const latestTxRequest = useRef(0);
+
+  const filterIsValid = historyFilter === "ALL" || accounts.some(a => a.id === historyFilter);
+  const activeFilter = filterIsValid ? historyFilter : (accounts.length > 0 ? accounts[0].id : "ALL");
+  const historyAccount = accounts.find(a => a.id === activeFilter);
+
   useEffect(() => {
     fetchAccounts();
-    fetchTransactions();
   }, []);
+
+  useEffect(() => {
+    if (accountsLoaded) fetchTransactions();
+  }, [accountsLoaded, activeFilter]);
 
   const fetchAccounts = async () => {
     const data = await invoke("get_accounts");
     setAccounts(data);
+    setAccountsLoaded(true);
   };
 
+  const txQuery = (offset) => ({ offset, limit: TX_PAGE_SIZE, accountId: activeFilter === "ALL" ? null : activeFilter });
+
   const fetchTransactions = async () => {
-    const data = await invoke("get_transactions_page", { offset: 0, limit: TX_PAGE_SIZE });
+    // Ignore replies from older requests if the user switched accounts quickly
+    const requestId = ++latestTxRequest.current;
+    const data = await invoke("get_transactions_page", txQuery(0));
+    if (requestId !== latestTxRequest.current) return;
     setTransactions(data);
     setTxOffset(data.length);
     setHasMoreTx(data.length === TX_PAGE_SIZE);
   };
 
   const loadMoreTransactions = async () => {
-    const data = await invoke("get_transactions_page", { offset: txOffset, limit: TX_PAGE_SIZE });
+    const requestId = latestTxRequest.current;
+    const data = await invoke("get_transactions_page", txQuery(txOffset));
+    if (requestId !== latestTxRequest.current) return;
     setTransactions(prev => [...prev, ...data]);
     setTxOffset(prev => prev + data.length);
     setHasMoreTx(data.length === TX_PAGE_SIZE);
@@ -147,8 +167,8 @@ export default function CashFlow() {
 
       <div style={{ display: "flex", gap: "15px", flexWrap: "wrap", marginBottom: "30px" }}>
           {accounts.map(acc => (
-              <div key={acc.id} style={{ padding: "20px", backgroundColor: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: "8px", minWidth: "200px", position: "relative" }}>
-                  <button onClick={() => handleDeleteAccount(acc.id, acc.name)} style={{ position: "absolute", top: "10px", right: "10px", background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "16px" }}>🗑️</button>
+              <div key={acc.id} onClick={() => setHistoryFilter(acc.id)} title={`Show ${acc.name}'s transaction history`} style={{ padding: "20px", backgroundColor: activeFilter === acc.id ? "#ecfdf5" : "#f9fafb", border: activeFilter === acc.id ? "2px solid #059669" : "1px solid #e5e7eb", borderRadius: "8px", minWidth: "200px", position: "relative", cursor: "pointer" }}>
+                  <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc.id, acc.name); }} style={{ position: "absolute", top: "10px", right: "10px", background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "16px" }}>🗑️</button>
                   <div style={{ fontSize: "18px", fontWeight: "bold", color: "#374151" }}>{acc.name}</div>
                   
                   {/* 🚨 THE FIX: Adding toLocaleString() for beautiful commas on your balances! */}
@@ -191,8 +211,20 @@ export default function CashFlow() {
       </div>
 
       <div>
-          <h3 style={{ borderBottom: "2px solid #e5e7eb", paddingBottom: "10px", color: "#1f2937" }}>📜 Transaction History</h3>
-          {transactions.length === 0 ? <p style={{ fontStyle: "italic", color: "#6b7280" }}>No transactions yet.</p> : (
+          <h3 style={{ borderBottom: "2px solid #e5e7eb", paddingBottom: "10px", color: "#1f2937", marginBottom: "12px" }}>
+              📜 {historyAccount ? `${historyAccount.name} — Transaction History` : "Complete Transaction History"}
+          </h3>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "12px" }}>
+              {accounts.map(acc => (
+                  <button key={acc.id} onClick={() => setHistoryFilter(acc.id)} style={{ padding: "6px 14px", backgroundColor: activeFilter === acc.id ? "#047857" : "#f3f4f6", color: activeFilter === acc.id ? "white" : "#374151", border: "1px solid #d1d5db", borderRadius: "999px", cursor: "pointer", fontWeight: "bold", fontSize: "13px" }}>
+                      {acc.name}
+                  </button>
+              ))}
+              <button onClick={() => setHistoryFilter("ALL")} style={{ padding: "6px 14px", backgroundColor: activeFilter === "ALL" ? "#1e3a8a" : "#f3f4f6", color: activeFilter === "ALL" ? "white" : "#374151", border: "1px solid #d1d5db", borderRadius: "999px", cursor: "pointer", fontWeight: "bold", fontSize: "13px" }}>
+                  📚 All Accounts
+              </button>
+          </div>
+          {transactions.length === 0 ? <p style={{ fontStyle: "italic", color: "#6b7280" }}>{historyAccount ? `No transactions for ${historyAccount.name} yet.` : "No transactions yet."}</p> : (
               <div style={{ maxHeight: "300px", overflowY: "auto" }}>
                   {(() => {
                       let undoableCount = 0;
