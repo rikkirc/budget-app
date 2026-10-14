@@ -2,13 +2,29 @@
 # Download it from the run's "Artifacts" section, copy it to your phone and open it to install.
 name: Android app
 
+# Runs whenever the code it builds changes, on any branch, and on demand
 on:
   workflow_dispatch:
   push:
-    tags: ["v*"]
-    paths-ignore: ["docs/**", "**.md"]
+    paths:
+      - "src/**"
+      - "src-tauri/**"
+      - "vault-core/**"
+      - "package.json"
+      - "package-lock.json"
+      - "index.html"
+      - "vite.config.js"
+      - ".github/workflows/android.yml"
   pull_request:
-    paths-ignore: ["docs/**", "**.md"]
+    paths:
+      - "src/**"
+      - "src-tauri/**"
+      - "vault-core/**"
+      - "package.json"
+      - "package-lock.json"
+      - "index.html"
+      - "vite.config.js"
+      - ".github/workflows/android.yml"
 
 jobs:
   apk:

@@ -1,13 +1,25 @@
 # Tests the shared business logic and the sync server, and checks the server's Docker image still builds
 name: Core and sync server
 
+# Runs whenever the code it builds changes, on any branch, and on demand
 on:
   workflow_dispatch:
   push:
-    tags: ["v*"]
-    paths-ignore: ["docs/**", "**.md"]
+    paths:
+      - "vault-core/**"
+      - "server/**"
+      - "src/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/server.yml"
   pull_request:
-    paths-ignore: ["docs/**", "**.md"]
+    paths:
+      - "vault-core/**"
+      - "server/**"
+      - "src/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/server.yml"
 
 jobs:
   test:
