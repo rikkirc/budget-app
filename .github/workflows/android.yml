@@ -44,7 +44,10 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # The action's default also asks for the retired "tools" package, which no longer exists and fails the install
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       - name: Install the Android NDK
         run: |
