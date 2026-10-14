@@ -1,0 +1,27 @@
+# Fly.io settings for the Vault sync server. Full steps: docs/SYNC_AND_MOBILE.md
+app = "CHANGE-ME-vault-sync"   # must be unique on Fly.io, e.g. "juan-vault-sync"
+primary_region = "sin"         # Singapore, the closest region to the Philippines
+
+[build]
+  dockerfile = "server/Dockerfile"
+
+[env]
+  VAULT_DATA_DIR = "/data"
+  PORT = "8080"
+
+# Your vaults live on this persistent disk, so they survive restarts and redeploys
+[[mounts]]
+  source = "vault_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1

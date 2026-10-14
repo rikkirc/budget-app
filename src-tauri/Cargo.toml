@@ -7,13 +7,16 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+# The lib target is what Android and iOS load; the desktop binary in main.rs just calls into it
+[lib]
+name = "budget_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-rusqlite = { version = "0.31.0", features = ["bundled"] }
-serde = { version = "1.0", features = ["derive"] }
-csv = "1.3"
+vault-core = { path = "../vault-core" }
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde_json = "1"

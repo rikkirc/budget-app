@@ -1,0 +1,18 @@
+[package]
+name = "vault-server"
+version = "0.2.0"
+description = "Vault sync server: one always-online copy of your vaults, shared live by the desktop and mobile apps"
+authors = ["rikkirc"]
+edition = "2021"
+
+[dependencies]
+vault-core = { path = "../vault-core" }
+axum = { version = "0.8", features = ["ws"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync"] }
+tower-http = { version = "0.6", features = ["cors", "limit"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+http-body-util = "0.1"
+tower = { version = "0.5", features = ["util"] }

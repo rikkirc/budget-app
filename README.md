@@ -1,6 +1,6 @@
 # Financial Command Center
 
-A desktop budgeting app built with [Tauri](https://tauri.app/), React, and Vite. Each profile gets its own local SQLite "vault", so your data stays on your machine.
+A budgeting app for desktop and Android, built with [Tauri](https://tauri.app/), React, and Vite. Each profile gets its own SQLite "vault". By default it stays on your machine; turn on **sync** to use the same vault from your phone, updated in real time.
 
 ## Features
 
@@ -10,6 +10,7 @@ A desktop budgeting app built with [Tauri](https://tauri.app/), React, and Vite.
 - **Loan Generator**: model debt and loan payoff, with Sinking Fund or True Bi-Monthly schedules
 - **Search**: find any bill, loan, or amount
 - **Smart bills**: reminders at login for recurring bills due within 10 days that still need an amount
+- **Phone app + real-time sync** (optional): run your own small sync server and every change on one device shows up on the others within a second. See [Sync and the phone app](docs/SYNC_AND_MOBILE.md)
 
 ## User's Manual
 
@@ -36,15 +37,23 @@ npm run tauri build
 npm test
 ```
 
-runs the frontend logic tests (search). The backend tests run against throwaway in-memory databases, never your real vaults:
+runs the frontend logic tests (search). The backend tests run against throwaway databases, never your real vaults:
 
 ```bash
-cd src-tauri && cargo test
+cd vault-core && cargo test   # the business logic shared by every app
+cd server && cargo test       # the sync server
 ```
+
+## Project layout
+
+- `src/`: the React frontend, shared by the desktop and phone apps. `src/api.js` sends each command to the local vault or the sync server.
+- `vault-core/`: all the business logic (accounts, bills, loans…), shared by the app and the sync server.
+- `src-tauri/`: the desktop/mobile app shell.
+- `server/`: the optional sync server. Deploy it with `fly.toml` or `server/Dockerfile`; see [docs/SYNC_AND_MOBILE.md](docs/SYNC_AND_MOBILE.md).
 
 ## Your data
 
-When you unlock a vault, the app creates `<profile_name>_finance_data.db` in `Documents\FinancialCommandCenter\`. These files hold your personal financial data and live outside the repo, so back that folder up separately. `.gitignore` also excludes any stray `*.db` files so they are never committed.
+When you unlock a vault without sync, the app creates `<profile_name>_finance_data.db` in `Documents\FinancialCommandCenter\`. With sync on, the shared copy lives on your sync server instead (see [backups](docs/SYNC_AND_MOBILE.md#backups)). These files hold your personal financial data and live outside the repo, so back that folder up separately. `.gitignore` also excludes any stray `*.db` files so they are never committed.
 
 ## Recommended IDE setup
 

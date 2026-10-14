@@ -18,7 +18,8 @@ A print-ready version of this manual is in [Vault-User-Manual.pdf](Vault-User-Ma
 8. [Step-by-step guides](#8-step-by-step-guides)
 9. [Your data & backups](#9-your-data--backups)
 10. [Troubleshooting](#10-troubleshooting)
-11. [Glossary](#11-glossary)
+11. [Phone app & sync](#11-phone-app--sync)
+12. [Glossary](#12-glossary)
 
 ---
 
@@ -344,7 +345,7 @@ Deleted items in the Recycle Bins aren't searched.
 
 ## 9. Your data & backups
 
-Everything stays on your computer; Vault never sends your data anywhere. Each vault is one file:
+Unless you turn on sync ([section 11](#11-phone-app--sync)), everything stays on your computer and Vault never sends your data anywhere. Each vault is one file:
 
 ```
 Documents\FinancialCommandCenter\<profile_name>_finance_data.db
@@ -399,7 +400,19 @@ Hidden maintenance buttons for data from older versions of the app. **Fix Stray 
 
 ---
 
-## 11. Glossary
+## 11. Phone app & sync
+
+Vault can run on your Android phone and stay in sync with your desktop in real time. A change on either one shows up on the other within a second. Both connect to a small **sync server** that you run yourself; [Sync and the phone app](SYNC_AND_MOBILE.md) walks through setting it up.
+
+- **Turn it on:** click **💻 Local only** in the top bar, enter your server address and sync token, then click **🔗 Connect**. The first time, let Vault upload this computer's vault so your phone starts with everything.
+- **On the phone:** enter the same address and token, then unlock with the **same profile name**.
+- **🟢 Live sync** means changes are flowing. **🟠 Reconnecting…** means the link dropped; Vault reconnects by itself.
+- **"Your vault was updated on another device"** appears when a change arrives while you're typing. Tap it to refresh once you've saved.
+- **Offline**, you can still view the last data the device loaded, but changes need a connection. If a change couldn't reach the server, press **🔄 Refresh** to see what was saved before trying again.
+
+---
+
+## 12. Glossary
 
 | Term | Meaning |
 |---|---|
@@ -419,4 +432,4 @@ Hidden maintenance buttons for data from older versions of the app. **Fix Stray 
 
 ---
 
-*Vault 0.2.0 · This manual describes the app as of October 2026.*
+*Vault 0.2.0 · This manual describes the app as of October 2026. The PDF version does not yet include section 11.*

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./api";
 
 export default function CashFlow() {
   const [accounts, setAccounts] = useState([]);

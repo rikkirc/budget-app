@@ -1,0 +1,32 @@
+/* Phone-sized screens. The screens are styled inline, so these rules match those inline styles and take precedence. */
+* { box-sizing: border-box; }
+body { margin: 0; -webkit-text-size-adjust: 100%; }
+
+@media (max-width: 700px) {
+  /* Respect the notch and the home bar on modern phones */
+  #root > div { padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom)) !important; }
+
+  /* Big buttons shrink to thumb size */
+  #root button[style*="font-size: 16px"] { padding: 10px 12px !important; font-size: 14px !important; }
+
+  /* Header: the tabs become one row you swipe sideways, with the vault name and actions in a compact row below */
+  .app-header { padding: 10px !important; gap: 8px !important; margin-bottom: 12px !important; }
+  .app-tabs { flex-wrap: nowrap !important; overflow-x: auto; width: 100%; gap: 6px !important; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .app-tabs::-webkit-scrollbar { display: none; }
+  .app-tabs button { flex-shrink: 0; white-space: nowrap; }
+  .app-actions { gap: 6px !important; width: 100%; }
+  #root .app-actions > * { padding: 6px 10px !important; font-size: 13px !important; }
+  .app-actions > span { flex: 1 1 100%; }
+
+  /* Nothing is allowed to be wider than the phone */
+  #root input, #root select, #root textarea { max-width: 100%; font-size: 16px !important; } /* 16px stops iOS zooming in on focus */
+  #root [style*="min-width: 250px"], #root [style*="min-width: 150px"] { min-width: 100% !important; }
+  #root [style*="minmax(350px"] { grid-template-columns: 1fr !important; }
+
+  /* Wide tables scroll sideways inside their card instead of stretching the page */
+  #root table { display: block; overflow-x: auto; white-space: nowrap; }
+
+  #root h1 { font-size: 22px !important; }
+  #root h2 { font-size: 19px !important; }
+  #root [style*="padding: 40px"], #root [style*="padding: 30px"], #root [style*="padding: 25px"] { padding: 18px !important; }
+}

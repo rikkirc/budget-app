@@ -1,0 +1,61 @@
+# Builds the Android app (an installable APK) on GitHub's machines, so no Android Studio is needed on your PC.
+# Download it from the run's "Artifacts" section, copy it to your phone and open it to install.
+name: Android app
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+    paths-ignore: ["docs/**", "**.md"]
+  pull_request:
+    paths-ignore: ["docs/**", "**.md"]
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    env:
+      NDK_VERSION: 27.0.11902837
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install the Android NDK
+        run: |
+          sdkmanager --install "ndk;${NDK_VERSION}"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      # The Android project is generated from tauri.conf.json until you commit your own src-tauri/gen/android
+      - name: Generate the Android project
+        run: |
+          if [ ! -d src-tauri/gen/android ]; then npx tauri android init --ci; fi
+
+      # A debug build is signed with Android's standard debug key, so it installs on any phone without extra setup
+      - name: Build the APK
+        run: npx tauri android build --apk --debug --target aarch64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vault-android-apk
+          path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
