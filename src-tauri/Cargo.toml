@@ -1,6 +1,6 @@
 [package]
 name = "budget-app"
-version = "0.1.0"
+version = "0.2.0"
 description = "Financial Command Center: a desktop budgeting app"
 authors = ["rikkirc"]
 edition = "2021"
