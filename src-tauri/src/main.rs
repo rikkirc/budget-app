@@ -37,8 +37,13 @@ fn login_user(profile: &str, state: State<'_, AppState>) -> String {
     // Tell the Receptionist to remember this safe for all future commands
     *state.db_path.lock().unwrap() = db_name.clone();
     
-    // Open the safe and build the empty drawers if this is a brand-new user!
     let conn = Connection::open(&db_name).unwrap();
+    init_schema(&conn);
+    format!("SUCCESS: Logged in as {}", profile)
+}
+
+// Open the safe and build the empty drawers if this is a brand-new user!
+fn init_schema(conn: &Connection) {
     conn.execute("CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, balance REAL NOT NULL DEFAULT 0.0)", []).unwrap();
     conn.execute("CREATE TABLE IF NOT EXISTS transactions (id INTEGER PRIMARY KEY, account_id INTEGER NOT NULL, tx_type TEXT NOT NULL, amount REAL NOT NULL, description TEXT NOT NULL, is_reversed INTEGER NOT NULL DEFAULT 0, linked_id INTEGER, FOREIGN KEY(account_id) REFERENCES accounts(id))", []).unwrap();
     conn.execute("CREATE TABLE IF NOT EXISTS smart_bills (id INTEGER PRIMARY KEY, name TEXT NOT NULL, amount REAL NOT NULL, due_date TEXT NOT NULL, payday_date TEXT NOT NULL, loan_id INTEGER NOT NULL DEFAULT 0, is_recurring INTEGER NOT NULL DEFAULT 0)", []).unwrap();
@@ -66,7 +71,6 @@ fn login_user(profile: &str, state: State<'_, AppState>) -> String {
     // Date & time each transaction was recorded (stamped automatically by the database, in local time)
     let _ = conn.execute("ALTER TABLE transactions ADD COLUMN created_at TEXT NOT NULL DEFAULT ''", []);
     let _ = conn.execute_batch("CREATE TRIGGER IF NOT EXISTS set_tx_timestamp AFTER INSERT ON transactions WHEN NEW.created_at = '' BEGIN UPDATE transactions SET created_at = datetime('now','localtime') WHERE id = NEW.id; END;");
-    format!("SUCCESS: Logged in as {}", profile)
 }
 
 // 🚨 UPDATED: Every single command now asks the Receptionist which safe to open!
@@ -130,6 +134,19 @@ fn undo_transaction(transaction_id: i32, state: State<'_, AppState>) -> String {
 #[tauri::command] fn get_transactions_page(offset: i32, limit: i32, state: State<'_, AppState>) -> Vec<TransactionLog> { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let mut stmt = conn.prepare("SELECT t.id, a.name, t.tx_type, t.amount, t.description, t.is_reversed, t.created_at, COALESCE(pa.name, '') FROM transactions t JOIN accounts a ON t.account_id = a.id LEFT JOIN transactions p ON t.linked_id = p.id LEFT JOIN accounts pa ON p.account_id = pa.id ORDER BY t.id DESC LIMIT ?1 OFFSET ?2").unwrap(); let iter = stmt.query_map(params![limit, offset], |row| { let reversed_int: i32 = row.get(5).unwrap_or(0); Ok(TransactionLog { id: row.get(0).unwrap_or(0), account_name: row.get(1).unwrap_or_else(|_| "".to_string()), tx_type: row.get(2).unwrap_or_else(|_| "".to_string()), amount: row.get(3).unwrap_or(0.0), description: row.get(4).unwrap_or_else(|_| "".to_string()), is_reversed: reversed_int != 0, created_at: row.get(6).unwrap_or_else(|_| "".to_string()), linked_account_name: row.get(7).unwrap_or_else(|_| "".to_string()) }) }).unwrap(); let mut logs = Vec::new(); for t in iter { if let Ok(l) = t { logs.push(l); } } logs }
 #[tauri::command] fn add_smart_bill(name: &str, amount: f64, due_date: &str, payday_date: &str, is_recurring: bool, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); match conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, is_recurring) VALUES (?1, ?2, ?3, ?4, ?5)", params![name, amount, due_date, payday_date, is_recurring as i32]) { Ok(_) => "SUCCESS!".to_string(), Err(_) => "ERROR".to_string() } }
 #[tauri::command] fn update_bill_amount(bill_id: i32, new_amount: f64, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); match conn.execute("UPDATE smart_bills SET amount = ?1 WHERE id = ?2", params![new_amount, bill_id]) { Ok(_) => "SUCCESS: Amount updated!".to_string(), Err(_) => "ERROR: Could not update amount".to_string() } }
+// Reassign one unpaid bill to a different paycheck allocation (only this occurrence; next month's recurring copy still uses the normal payday rule)
+#[tauri::command] fn move_bill_allocation(bill_id: i32, new_payday: &str, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); move_bill_allocation_impl(&conn, bill_id, new_payday) }
+fn move_bill_allocation_impl(conn: &Connection, bill_id: i32, new_payday: &str) -> String {
+    // SQLite's date() returns NULL for impossible dates like 2026-02-30, so this doubles as validation
+    let normalized: Option<String> = conn.query_row("SELECT date(?1)", params![new_payday], |r| r.get(0)).unwrap_or(None);
+    if normalized.as_deref() != Some(new_payday) {
+        return "ERROR: That paycheck date isn't a real calendar date.".to_string();
+    }
+    match conn.execute("UPDATE smart_bills SET payday_date = ?1 WHERE id = ?2", params![new_payday, bill_id]) {
+        Ok(1) => "SUCCESS: Bill moved to the new paycheck!".to_string(),
+        _ => "ERROR: Could not find that bill. It may have already been paid.".to_string(),
+    }
+}
 #[tauri::command] fn get_smart_bills(state: State<'_, AppState>) -> Vec<SmartBill> { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let mut stmt = conn.prepare("SELECT id, name, amount, due_date, payday_date, is_recurring, loan_id FROM smart_bills").unwrap(); let iter = stmt.query_map([], |row| { let recurring_int: i32 = row.get(5).unwrap_or(0); Ok(SmartBill { id: row.get(0).unwrap_or(0), name: row.get(1).unwrap_or_else(|_| "".to_string()), amount: row.get(2).unwrap_or(0.0), due_date: row.get(3).unwrap_or_else(|_| "".to_string()), payday_date: row.get(4).unwrap_or_else(|_| "".to_string()), is_recurring: recurring_int != 0, loan_id: row.get(6).unwrap_or(0) }) }).unwrap(); let mut bills = Vec::new(); for b in iter { if let Ok(item) = b { bills.push(item); } } bills }
 #[tauri::command] fn add_loan(name: &str, principal: f64, remaining_balance: f64, term: i32, term_type: &str, frequency: &str, payment_amount: f64, due_date: &str, payday_date: &str, total_incurred: f64, due_structure: &str, date_acquired: &str, bill_names: Vec<String>, bill_amounts: Vec<f64>, bill_dues: Vec<String>, bill_paydays: Vec<String>, state: State<'_, AppState>) -> String { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let _ = conn.execute("INSERT INTO loans (name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure, date_acquired) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)", params![name, principal, remaining_balance, term, term_type, frequency, payment_amount, due_date, payday_date, total_incurred, due_structure, date_acquired]); let new_loan_id = conn.last_insert_rowid(); for i in 0..bill_names.len() { let _ = conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id) VALUES (?1, ?2, ?3, ?4, ?5)", params![bill_names[i], bill_amounts[i], bill_dues[i], bill_paydays[i], new_loan_id]); } "SUCCESS: Loan generated!".to_string() }
 #[tauri::command] fn get_loans(state: State<'_, AppState>) -> Vec<Loan> { let db = state.db_path.lock().unwrap().clone(); let conn = Connection::open(&db).unwrap(); let mut stmt = conn.prepare("SELECT id, name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure, date_acquired FROM loans").unwrap(); let iter = stmt.query_map([], |row| { Ok(Loan { id: row.get(0).unwrap_or(0), name: row.get(1).unwrap_or_else(|_| "".to_string()), principal: row.get(2).unwrap_or(0.0), remaining_balance: row.get(3).unwrap_or(0.0), term: row.get(4).unwrap_or(0), term_type: row.get(5).unwrap_or_else(|_| "".to_string()), frequency: row.get(6).unwrap_or_else(|_| "".to_string()), payment_amount: row.get(7).unwrap_or(0.0), next_due_date: row.get(8).unwrap_or_else(|_| "".to_string()), payday_date: row.get(9).unwrap_or_else(|_| "".to_string()), total_incurred: row.get(10).unwrap_or(0.0), due_structure: row.get(11).unwrap_or_else(|_| "Sinking Fund".to_string()), date_acquired: row.get(12).unwrap_or_else(|_| "".to_string()) }) }).unwrap(); let mut loans = Vec::new(); for l in iter { if let Ok(item) = l { loans.push(item); } } loans }
@@ -520,8 +537,62 @@ fn main() {
             add_account, get_accounts, delete_account, mark_first_half_handled, log_income, fund_bill_to_savings, log_expense, transfer_money, get_all_transactions,
             add_smart_bill, get_smart_bills, add_loan, get_loans, delete_loan, pay_bill, get_paid_bills, undo_bill_payment,
             get_archived_loans, undo_delete_loan, delete_bill, get_archived_bills, undo_delete_bill, get_completed_loans, get_sinking_fund_info, repair_loan_ids, update_bill_amount,
-            undo_fund_to_savings, undo_transaction, repair_balance_rounding, get_transactions_page, get_paid_bills_page
+            undo_fund_to_savings, undo_transaction, repair_balance_rounding, get_transactions_page, get_paid_bills_page,
+            move_bill_allocation
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+// These tests run against a throwaway in-memory database, never a real vault file
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        init_schema(&conn);
+        conn
+    }
+
+    fn add_bill(conn: &Connection, name: &str, amount: f64, due: &str, payday: &str) -> i32 {
+        conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date) VALUES (?1, ?2, ?3, ?4)", params![name, amount, due, payday]).unwrap();
+        conn.last_insert_rowid() as i32
+    }
+
+    fn payday_of(conn: &Connection, bill_id: i32) -> String {
+        conn.query_row("SELECT payday_date FROM smart_bills WHERE id = ?1", params![bill_id], |r| r.get(0)).unwrap()
+    }
+
+    #[test]
+    fn move_bill_changes_only_that_bill() {
+        let conn = test_db();
+        let internet = add_bill(&conn, "Internet", 1500.0, "2026-11-20", "2026-11-15");
+        let water = add_bill(&conn, "Water", 400.0, "2026-11-22", "2026-11-15");
+
+        let result = move_bill_allocation_impl(&conn, internet, "2026-10-31");
+
+        assert!(result.starts_with("SUCCESS"), "{}", result);
+        assert_eq!(payday_of(&conn, internet), "2026-10-31");
+        assert_eq!(payday_of(&conn, water), "2026-11-15");
+    }
+
+    #[test]
+    fn move_bill_rejects_impossible_dates() {
+        let conn = test_db();
+        let internet = add_bill(&conn, "Internet", 1500.0, "2026-11-20", "2026-11-15");
+
+        for bad in ["2026-02-30", "2026-13-01", "not a date", ""] {
+            let result = move_bill_allocation_impl(&conn, internet, bad);
+            assert!(result.starts_with("ERROR"), "{} should be rejected", bad);
+        }
+        assert_eq!(payday_of(&conn, internet), "2026-11-15");
+    }
+
+    #[test]
+    fn move_bill_reports_missing_bill() {
+        let conn = test_db();
+        let result = move_bill_allocation_impl(&conn, 999, "2026-10-31");
+        assert!(result.starts_with("ERROR"), "{}", result);
+    }
 }

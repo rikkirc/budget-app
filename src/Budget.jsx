@@ -22,6 +22,8 @@ export default function Budget() {
   const [newBillRecurring, setNewBillRecurring] = useState(false);
   const [editingAmountId, setEditingAmountId] = useState(null);
   const [editAmountValue, setEditAmountValue] = useState("");
+  const [movingBillId, setMovingBillId] = useState(null);
+  const [moveTargetPayday, setMoveTargetPayday] = useState("");
   const [revealedReceiptIds, setRevealedReceiptIds] = useState(new Set());
   const [receiptOffset, setReceiptOffset] = useState(0);
   const [hasMoreReceipts, setHasMoreReceipts] = useState(true);
@@ -162,6 +164,20 @@ export default function Budget() {
     loadData();
   };
 
+  const handleMoveBill = async (bill) => {
+    if (!moveTargetPayday) return alert("Please pick a paycheck to move this bill to!");
+    if (moveTargetPayday === bill.payday_date) return alert("This bill is already allocated to that paycheck.");
+    if (moveTargetPayday > bill.due_date && !window.confirm(`That paycheck lands after this bill's due date (${formatDate(bill.due_date).replace(" BILLS", "")}). Move it anyway?`)) return;
+
+    const response = await invoke("move_bill_allocation", { billId: bill.id, newPayday: moveTargetPayday });
+    alert(response);
+    if (response.startsWith("SUCCESS")) {
+        setMovingBillId(null);
+        setMoveTargetPayday("");
+        loadData();
+    }
+  };
+
   const handleDeleteBill = async (id) => {
     const response = await invoke("delete_bill", { billId: id });
     alert(response);
@@ -223,7 +239,8 @@ export default function Budget() {
   });
 
   const sortedPaydays = Object.keys(groupedBills).sort((a, b) => new Date(a) - new Date(b));
-  const currentTab = activeTab || (sortedPaydays.length > 0 ? sortedPaydays[0] : null);
+  // Fall back to the first tab if the selected paycheck no longer has bills (e.g. its last bill was paid or moved away)
+  const currentTab = activeTab && groupedBills[activeTab] ? activeTab : (sortedPaydays.length > 0 ? sortedPaydays[0] : null);
 
   return (
     <div style={{ backgroundColor: "white", padding: "30px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}>
@@ -268,7 +285,7 @@ export default function Budget() {
                 {sortedPaydays.map(payday => (
                     <button 
                         key={payday}
-                        onClick={() => { setActiveTab(payday); setActiveBillId(null); }}
+                        onClick={() => { setActiveTab(payday); setActiveBillId(null); setMovingBillId(null); }}
                         style={{ padding: "10px 20px", backgroundColor: currentTab === payday ? "#2563eb" : "#f3f4f6", color: currentTab === payday ? "white" : "#4b5563", border: "none", borderRadius: "5px", cursor: "pointer", fontWeight: "bold", whiteSpace: "nowrap" }}
                     >
                         💼 {formatDate(payday)}
@@ -284,7 +301,7 @@ export default function Budget() {
 
                     {groupedBills[currentTab].map(bill => (
                         <div key={bill.id} style={{ padding: "15px", backgroundColor: "#f9fafb", borderRadius: "8px", border: "1px solid #e5e7eb" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: activeBillId === bill.id ? "15px" : "0" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: activeBillId === bill.id || movingBillId === bill.id ? "15px" : "0" }}>
                                 <div>
                                     <div style={{ fontWeight: "bold", color: "#374151", fontSize: "16px" }}>{bill.name}</div>
                                     <div style={{ color: "#dc2626", fontSize: "14px", marginTop: "5px" }}>Target Due Date: {formatDate(bill.due_date).replace(" BILLS", "")}</div>
@@ -317,14 +334,42 @@ export default function Budget() {
                                         🗑️ Delete
                                     </button>
                                     <button onClick={() => {
+                                        const opening = movingBillId !== bill.id;
+                                        setMovingBillId(opening ? bill.id : null);
+                                        setMoveTargetPayday("");
+                                        if (opening) setActiveBillId(null);
+                                    }} style={{ padding: "8px 12px", backgroundColor: movingBillId === bill.id ? "#4b5563" : "#f3f4f6", color: movingBillId === bill.id ? "white" : "#374151", border: "1px solid #d1d5db", borderRadius: "5px", cursor: "pointer", fontWeight: "bold" }}>
+                                        {movingBillId === bill.id ? "Cancel" : "📅 Move"}
+                                    </button>
+                                    <button onClick={() => {
                                         const opening = activeBillId !== bill.id;
                                         setActiveBillId(opening ? bill.id : null);
+                                        if (opening) setMovingBillId(null);
                                         if (opening) setActionType(isSinkingFundFirstHalf(bill) ? "FUND" : "PAY");
                                     }} disabled={bill.amount === 0} style={{ padding: "8px 16px", backgroundColor: bill.amount === 0 ? "#d1d5db" : "#2563eb", color: "white", border: "none", borderRadius: "5px", cursor: bill.amount === 0 ? "not-allowed" : "pointer", fontWeight: "bold" }}>
                                         {activeBillId === bill.id ? "Cancel" : "Handle Bill"}
                                     </button>
                                 </div>
                             </div>
+
+                            {movingBillId === bill.id && (
+                                <div style={{ padding: "15px", backgroundColor: "#f9fafb", borderRadius: "8px", border: "1px solid #d1d5db" }}>
+                                    <p style={{ margin: "0 0 10px 0", fontSize: "13px", color: "#4b5563" }}>
+                                        Move this bill from the <strong>{formatDate(bill.payday_date).replace(" BILLS", "")}</strong> paycheck to another one. Only this occurrence moves.
+                                    </p>
+                                    <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                                        <select value={sortedPaydays.includes(moveTargetPayday) ? moveTargetPayday : ""} onChange={e => setMoveTargetPayday(e.target.value)} style={{ padding: "10px", borderRadius: "5px", border: "1px solid #ccc", flex: 1, minWidth: "200px" }}>
+                                            <option value="">Pick an existing paycheck...</option>
+                                            {sortedPaydays.filter(p => p !== bill.payday_date).map(p => <option key={p} value={p}>💼 {formatDate(p)}</option>)}
+                                        </select>
+                                        <span style={{ color: "#6b7280", fontSize: "13px" }}>or</span>
+                                        <input type="date" value={moveTargetPayday} onChange={e => setMoveTargetPayday(e.target.value)} onBlur={e => { if (!isRealDate(e.target.value)) { alert("That date doesn't exist on the calendar! Please pick a valid date."); setMoveTargetPayday(""); } }} style={{ padding: "10px", borderRadius: "5px", border: "1px solid #ccc" }} />
+                                        <button onClick={() => handleMoveBill(bill)} style={{ padding: "10px 20px", backgroundColor: "#4b5563", color: "white", border: "none", borderRadius: "5px", cursor: "pointer", fontWeight: "bold" }}>
+                                            Confirm Move
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
 
                             {activeBillId === bill.id && (
                                 <div style={{ padding: "15px", backgroundColor: "#eff6ff", borderRadius: "8px", border: "1px solid #bfdbfe" }}>
