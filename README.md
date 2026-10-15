@@ -4,6 +4,8 @@ A budgeting app for desktop and Android, built with [Tauri](https://tauri.app/),
 
 ▶️ **[Watch the sync demo](https://drive.google.com/file/d/1LszPGQpBaUTLtbLXiTfI56x02FueR9nd/view)**: a bill paid on the phone shows up on the desktop within a second.
 
+📄 **[Read the case study](docs/CASE_STUDY.md)**: why I built it, how sync avoids recording a payment twice, and what I'd do differently.
+
 ## Screenshots
 
 The same demo vault on the desktop and on an Android phone, kept in step by live sync.
