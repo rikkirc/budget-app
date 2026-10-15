@@ -12,6 +12,7 @@ import { createSyncEngine, uploadVault } from "./sync/engine";
 import { firestoreRemote } from "./sync/firestoreRemote";
 import { tauriReplica } from "./sync/tauriReplica";
 import { bridgeReplica } from "./sync/bridgeReplica";
+import { fromBase64 } from "./sync/base64";
 
 // The phone app has no local vault: it always works through a family account
 export const IS_MOBILE = ["android", "ios"].includes(import.meta.env.TAURI_ENV_PLATFORM);
@@ -98,7 +99,7 @@ export async function invoke(cmd, args = {}) {
 
 /** Desktop only: copies this computer's unlocked local vault into your account. replace=false never overwrites data. */
 export async function uploadLocalVault(profile) {
-  const bytes = new Uint8Array(await tauriInvoke("export_vault"));
+  const bytes = fromBase64(await tauriInvoke("export_vault"));
   const remote = firestoreRemote(services().db, user.uid, account.vaultKey(profile));
   return {
     upload: (replace) => uploadVault(remote, bytes, replace),
