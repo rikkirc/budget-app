@@ -1,6 +1,6 @@
 # Case study: Vault, a budget app that runs on payday
 
-**Built by:** Rikki Cabanlet · **Built with:** AI-assisted coding (Claude) in VS Code · **Stack:** Tauri, React, Rust, SQLite, Firebase · **Time:** at least four days, 18 merged pull requests
+**Built by:** Rikki Cabanlet · **Built with:** AI-assisted coding (Claude) in VS Code · **Stack:** Tauri, React, Rust, SQLite, Firebase · **Time:** at least four days, 19 merged pull requests
 
 ## The problem
 
