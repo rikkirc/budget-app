@@ -45,7 +45,7 @@ What's done, what's next, and what's blocked. Newest entries first.
 
 ### Bugs fixed (#18)
 - [x] Phone: bill rows on Bi-Monthly Budget wrap their buttons below the name, so nothing runs off the screen. Receipts and Recycle Bin too.
-- [x] Phone: the page keeps at least 64px clear at the bottom, since Android's WebView reports the safe-area inset as 0. **Still needs checking on a real phone with the new APK.**
+- [x] Phone: the page keeps at least 64px clear at the bottom, since Android's WebView reports the safe-area inset as 0. Checked on a real phone.
 - [x] Phone: Budget Summary and Active Loans tables fit the screen; Amount and Remaining stay visible.
 - [x] Split-loan names display as "Car Loan — 2nd Half (Due)" instead of nesting brackets (display only; stored names unchanged). `src/billNames.js`, with tests.
 - [x] Desktop: a single loan card fills the full width.
@@ -55,11 +55,11 @@ What's done, what's next, and what's blocked. Newest entries first.
 - [x] Deleting a loan removed other loans' payments when one name started with the other. Now it removes only its own payments.
 
 ### Next up
-- [ ] Test the edit buttons on a real PC and phone (so far only checked in a browser).
-- [ ] Rename "Demo Loan sinking Fund" in the demo vault, then retake the loan screenshot.
-- [ ] Decide whether the green "Total Liquid Cash" and Completed Loans cards should be toned down too.
-- [ ] Install the new APK and confirm nothing sits under the navigation bar.
-- [ ] Retake the Bi-Monthly Budget screenshot so the README shows the new "— 2nd Half (Due)" name format.
+- [x] Test the edit buttons on a real PC and phone.
+- Skipped: renaming "Demo Loan sinking Fund" in the demo vault and retaking the loan screenshot (minor detail).
+- [x] Decide whether the green "Total Liquid Cash" and Completed Loans cards should be toned down too.
+- [x] Install the new APK and confirm nothing sits under the navigation bar.
+- Skipped: retaking the Bi-Monthly Budget screenshot for the new "— 2nd Half (Due)" name format (minor detail).
 
 ## Known limits
 
