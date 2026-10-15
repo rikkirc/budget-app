@@ -31,42 +31,39 @@ This manual covers both apps from installation to everyday use. A print-ready ve
 13. [Troubleshooting](#13-troubleshooting)
 14. [Glossary](#14-glossary)
 
-[Appendix: Setting up Firebase](#appendix-setting-up-firebase) (once, for whoever manages Vault for the family)
+[Appendix: Setting up Firebase](#appendix-setting-up-firebase) (only for the person who runs Vault's sync)
 
 ---
 
 ## 1. Installing Vault
 
-Vault's installers are built automatically on GitHub. Whoever manages Vault for the family downloads them and shares them with everyone else (for example through Messenger or Google Drive); family members don't need a GitHub account.
+You'll receive Vault as a **Google Drive link** from the person who shared it with you. There are two files; install the one for your device:
 
-### Get the installers (for whoever manages Vault)
-
-1. Go to **github.com/rikkirc/budget-app** and open the **Actions** tab.
-2. In the list on the left, click **Windows app** (for computers) or **Android app** (for phones).
-3. Click the most recent run with a **green ✓**.
-4. Scroll down to **Artifacts** and click **vault-windows-installer** or **vault-android-apk**. A `.zip` file downloads.
-5. Unzip it. Inside is `Vault_0.2.0_x64-setup.exe` (Windows) or an `.apk` file (Android).
-
-> [!NOTE]
-> GitHub keeps each build's files for 90 days. If the link has expired, open the workflow page, click **Run workflow** to build a fresh copy, and wait about 10 minutes.
+| Device | File |
+|---|---|
+| **Windows computer** | `Vault_0.2.0_x64-setup.exe` |
+| **Android phone** | A file ending in `.apk` |
 
 ### Install on a Windows computer
 
 1. **Back up first if you already use Vault:** copy the folder `Documents\FinancialCommandCenter` to your Desktop or a USB drive.
 2. **If an older Vault is installed,** remove it: **Start → Settings → Apps → Installed apps → Vault → ⋯ → Uninstall**. Your data stays in `Documents\FinancialCommandCenter`; uninstalling never deletes it.
-3. Double-click `Vault_0.2.0_x64-setup.exe`.
-4. If Windows shows **Windows protected your PC**, click **More info**, then **Run anyway**. This appears because the installer isn't signed with a paid certificate, which is normal for a family-built app.
-5. Click **Next → Install → Finish**, then open **Vault** from the Start Menu. The window is titled **Financial Command Center**.
+3. Open the Google Drive link and click **Download** (⬇). If Drive or your browser warns that the file might be harmful or can't be scanned, choose **Download anyway** or **Keep**.
+4. Open your **Downloads** folder and double-click `Vault_0.2.0_x64-setup.exe`.
+5. If Windows shows **Windows protected your PC**, click **More info**, then **Run anyway**. This appears because the installer isn't signed with a paid certificate, which is normal for a family-built app.
+6. Click **Next → Install → Finish**, then open **Vault** from the Start Menu. The window is titled **Financial Command Center**.
 
 ### Install on an Android phone
 
-1. Copy the `.apk` file to the phone (or download it there) and tap it.
-2. If Android asks, allow your browser or file manager to **Install unknown apps**, then go back and tap **Install**.
-3. Open **Vault** from your apps.
+1. Open the Google Drive link on your phone and tap **Download** (⬇). Confirm if your phone asks.
+2. When the download finishes, tap the notification (or open the **Files** app → **Downloads**) and tap the `.apk` file.
+3. If Android says your browser or Drive **isn't allowed to install unknown apps**, tap **Settings**, switch on **Allow from this source**, then go back and tap **Install**.
+4. If **Google Play Protect** warns about an unrecognized app, tap **More details → Install anyway**. This appears because Vault isn't from the Play Store.
+5. Open **Vault** from your apps.
 
 ### Updating
 
-Install a newer version the same way. On Android, open the new `.apk` and tap **Update**; there's no need to uninstall first. Your data is kept on every device, and everything synced is also safe in your family account.
+When you're sent a new version, install it the same way. On Android, open the new `.apk` and tap **Update**; there's no need to uninstall first. Your data is kept on every device, and everything synced is also safe in your family account.
 
 ---
 
@@ -94,7 +91,7 @@ For syncing, profile names may only contain letters, numbers, spaces, `-` and `_
 
 Signing in to a family account keeps your phone and computer on the same data. It's free, needs no server, and each family member's account is private: nobody else can see your vaults.
 
-You need two things from whoever manages Vault: the app (section 1) and the **family invite code**.
+You need two things from the person who shared Vault with you: the app (section 1) and the **family invite code**.
 
 > [!NOTE]
 > On the **computer**, signing in is optional. Without it, Vault works exactly as before and keeps everything on that one computer ("This computer only"). On the **phone**, you always sign in, because the phone keeps its data in step with your account.
@@ -558,10 +555,10 @@ Hidden maintenance buttons for data from older versions of the app. **Fix Stray 
 ### Phone, accounts & sync
 
 **The phone says "Sync isn't set up yet"**
-That copy of the app was built before Firebase was connected. Install the latest Android app (section 1).
+That copy of the app is out of date. Ask for the latest version and install it (section 1).
 
 **"That family invite code isn't right"**
-Check the code with whoever manages Vault; it must match exactly, including dashes.
+Check the code with the person who shared Vault with you; it must match exactly, including dashes.
 
 **"Wrong email or password"**
 Check for typos, or tap **Forgot password?** to get a reset email. After several wrong tries, Vault asks you to wait a few minutes.
@@ -582,13 +579,13 @@ Check the device's internet connection. If it stays orange on a good connection 
 Your password was changed on another device (or reset by email). Sign in with the new password.
 
 **"To sync, profile names may only use letters, numbers, spaces, - and _"**
-Your computer profile name has other characters, like a period. Create a new vault with a plain name, or ask whoever manages Vault to help move the data.
+Your computer profile name has other characters, like a period. Create a new vault with a plain name, or ask the person who shared Vault with you to help move the data.
 
 **After signing out on the computer, my recent changes are gone**
 They aren't gone: they're in your account. The computer is now showing its old offline copy. Sign in again to see your synced data.
 
 **The phone shows "ERROR: Expected the checkpoint's bytes"**
-This was a bug in an early phone app. Install the latest Android app (section 1) over the old one; your data is safe.
+This was a bug in an early phone app. Ask for the latest version and install it over the old one (section 1); your data is safe.
 
 ---
 
@@ -610,7 +607,7 @@ This was a bug in an early phone app. Install the latest Android app (section 1)
 | **Total Loan Incurred** | Principal plus all interest. |
 | **Vault** | One profile's data file, or the app itself. |
 | **Family account** | Your email-and-password sign-in. It keeps your vaults in step across your devices. |
-| **Family invite code** | The code needed to create an account, chosen by whoever manages Vault. |
+| **Family invite code** | The code needed to create an account, given to you by the person who shared Vault with you. |
 | **Live sync** | The connection that sends changes between your devices as they happen. |
 | **Local only** | Using Vault on a computer without signing in; its data stays on that computer. |
 | **Upload** | Copying a computer's existing vault into your account the first time you sign in. |
@@ -620,14 +617,14 @@ This was a bug in an early phone app. Install the latest Android app (section 1)
 
 ## Appendix: Setting up Firebase
 
-This is done **once**, by whoever manages Vault for the family, before anyone creates an account. It takes about 10 minutes and is free: Firebase's **Spark** plan needs no credit card and can't charge you. Never click **Upgrade** to the Blaze plan.
+This is done **once**, by the person who runs Vault's sync for the family, before anyone creates an account. Family members can skip it. It takes about 10 minutes and is free: Firebase's **Spark** plan needs no credit card and can't charge you. Never click **Upgrade** to the Blaze plan.
 
 1. **Create the project.** Go to **console.firebase.google.com**, click **Create a project**, name it (e.g. `vault-family`), and turn **Google Analytics off**.
 2. **Turn on email sign-in.** **Build → Authentication → Get started → Sign-in method → Email/Password**, switch on the first toggle, **Save**.
 3. **Create the database.** **Build → Firestore Database → Create database**. Location **asia-southeast1 (Singapore)** (it can't be changed later), **Start in production mode**, **Create**.
-4. **Add the security rules.** In Firestore's **Rules** tab, replace everything with the contents of `firestore.rules` from the repository and click **Publish**.
+4. **Add the security rules.** In Firestore's **Rules** tab, replace everything with the contents of the `firestore.rules` file from Vault's source code and click **Publish**.
 5. **Create the family invite code.** In Firestore's **Data** tab: **+ Start collection**, ID `invites`, **Next**. As the **Document ID**, type your code, long and hard to guess (e.g. `adobo-sinigang-mango-2026`). Add a field `note` = `family` and **Save**. To stop new sign-ups later, delete that document.
-6. **Connect the app.** **⚙️ Project settings → General → Your apps → Web (`</>`)**, register an app named `Vault`, and copy the `firebaseConfig` values into `src/firebaseConfig.js` in the repository. Committing the change rebuilds the apps automatically; then share the new installers (section 1).
+6. **Connect the app.** **⚙️ Project settings → General → Your apps → Web (`</>`)**, register an app named `Vault`, and copy the `firebaseConfig` values into `src/firebaseConfig.js` in the app's source code, then rebuild the apps and share the new installers with everyone.
 
 The full technical guide, including free-plan limits and how sync works inside, is in [SYNC_AND_MOBILE.md](SYNC_AND_MOBILE.md).
 
