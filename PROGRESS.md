@@ -2,7 +2,7 @@
 
 What's done, what's next, and what's blocked. Newest entries first.
 
-## Current state (2026-10-15) — v0.2.0
+## Current state (2026-10-15) — v0.2.0 + layout fixes (#18)
 
 - **Platforms:** Windows desktop (Tauri) and Android.
 - **Sync:** optional real-time sync between devices through Firebase (free Spark plan), with family accounts gated by an invite code. Without sync, each vault stays on the device.
@@ -11,6 +11,9 @@ What's done, what's next, and what's blocked. Newest entries first.
 - **Tests:** frontend search and sync engine, Rust backend tests (run on Linux CI), Firebase security-rule tests on the emulators.
 
 ## Log
+
+### 2026-10-15 (evening)
+- Fixed all five layout bugs from the list and updated the User's Manual to the new name format (#18). CI green: tests, Android APK, Windows installer.
 
 ### 2026-10-15
 - Merged the Android app and real-time Firebase sync (#17).
@@ -34,12 +37,16 @@ What's done, what's next, and what's blocked. Newest entries first.
 ### Planned features
 - [ ] Edit and rename accounts in Cash Flow (e.g. rename "Demo Loan sinking Fund"). The new name should also show in loan schedules and Receipts.
 
-### Bugs to fix later
-- [ ] Phone: bill rows on Bi-Monthly Budget are wider than the screen (buttons don't wrap), so the page slides sideways and "Handle Bill" is cut off.
-- [ ] Phone: content sits under Android's navigation bar (the safe-area inset reads as 0 in the Android WebView).
-- [ ] Phone: summary tables (Budget Summary, Active Loans) cut off the Amount column.
-- [ ] Split-loan labels nest brackets: "Demo Loan 1 (2nd Half (Due))".
-- [ ] Desktop: the loan card only fills the left half of a wide window.
+### Bugs fixed (#18)
+- [x] Phone: bill rows on Bi-Monthly Budget wrap their buttons below the name, so nothing runs off the screen. Receipts and Recycle Bin too.
+- [x] Phone: the page keeps at least 64px clear at the bottom, since Android's WebView reports the safe-area inset as 0. **Still needs checking on a real phone with the new APK.**
+- [x] Phone: Budget Summary and Active Loans tables fit the screen; Amount and Remaining stay visible.
+- [x] Split-loan names display as "Car Loan — 2nd Half (Due)" instead of nesting brackets (display only; stored names unchanged). `src/billNames.js`, with tests.
+- [x] Desktop: a single loan card fills the full width.
+
+### Next up
+- [ ] Install the new APK and confirm nothing sits under the navigation bar.
+- [ ] Retake the Bi-Monthly Budget screenshot so the README shows the new "— 2nd Half (Due)" name format.
 
 ## Known limits
 

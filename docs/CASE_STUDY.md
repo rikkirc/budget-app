@@ -1,6 +1,6 @@
 # Case study: Vault, a budget app that runs on payday
 
-**Built by:** Rikki Cabanlet · **Built with:** AI-assisted coding (Claude) in VS Code · **Stack:** Tauri, React, Rust, SQLite, Firebase · **Time:** at least four days, 17 merged pull requests
+**Built by:** Rikki Cabanlet · **Built with:** AI-assisted coding (Claude) in VS Code · **Stack:** Tauri, React, Rust, SQLite, Firebase · **Time:** at least four days, 18 merged pull requests
 
 ## The problem
 
@@ -22,4 +22,4 @@ A household needs the same data on more than one device. I added optional real-t
 
 ## What I'd do differently
 
-Synced data is stored in Firebase without its own encryption, which is fine for a family but not for sensitive client records. For an app holding other people's data I would add encryption and check compliance with the Data Privacy Act of 2012 from the start. The phone layout also needs another pass; a few screens are still wider than the screen.
+Synced data is stored in Firebase without its own encryption, which is fine for a family but not for sensitive client records. For an app holding other people's data I would add encryption and check compliance with the Data Privacy Act of 2012 from the start. I'd also test on a real phone earlier: my first phone build had screens wider than the display, which I only caught from screenshots and fixed afterwards.
