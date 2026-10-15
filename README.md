@@ -2,7 +2,7 @@
 
 A budgeting app for desktop and Android, built with [Tauri](https://tauri.app/), React, and Vite. Each profile gets its own SQLite "vault". By default it stays on your machine; turn on **sync** to use the same vault from your phone, updated in real time.
 
-▶️ **[Watch the sync demo](https://drive.google.com/file/d/10XQ0sMUvfdSqgO8z5-h0m_gS-BWxifpJ/view)**: a bill paid on the phone shows up on the desktop within a second.
+▶️ **[Watch the sync demo](https://drive.google.com/file/d/1LszPGQpBaUTLtbLXiTfI56x02FueR9nd/view)**: a bill paid on the phone shows up on the desktop within a second.
 
 ## Screenshots
 
