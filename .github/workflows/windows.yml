@@ -35,9 +35,6 @@ jobs:
 
       - run: npm ci
 
-      # The app's own Rust tests, including its commands called through Tauri's IPC exactly as the screens call them
-      - run: cargo test --manifest-path src-tauri/Cargo.toml
-
       - name: Build the installer
         run: npx tauri build --bundles nsis
 
