@@ -28,7 +28,7 @@ What's done, what's next, and what's blocked. Newest entries first.
 - [x] Add screenshots (desktop Dashboard, phone Dashboard, Loan Generator) to the README.
 - [x] Add a Bi-Monthly Budget screenshot.
 - [x] Retake the Dashboard pair (desktop + phone) with the updated demo data.
-- [ ] Record a 60-second demo: pay a bill on the phone, watch the desktop update.
+- [x] Record a 60-second demo: pay a bill on the phone, watch the desktop update (linked in the README).
 - [ ] Write a half-page case study for the portfolio.
 
 ### Planned features
