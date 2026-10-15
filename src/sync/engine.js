@@ -109,9 +109,9 @@ export function createSyncEngine({ remote, replica, clientId, onChange = () => {
     if (checkpointing || closed || lastSeq - (latestCheckpoint?.seq ?? 0) < checkpointEvery) return;
     checkpointing = true;
     try {
-      const seq = lastSeq;
-      const bytes = await replica.snapshot();
-      if (lastSeq !== seq) return; // more changes arrived meanwhile; the next round will catch up
+      // Take the snapshot in the same queue that applies changes, so the vault can't change halfway through it
+      let seq, bytes;
+      await (draining = draining.then(async () => { seq = lastSeq; bytes = await replica.snapshot(); }));
       const checkpoint = { id: `s${seq}`, seq };
       await remote.putCheckpoint(checkpoint.id, bytes);
       const previous = latestCheckpoint;

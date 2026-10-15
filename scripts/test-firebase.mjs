@@ -17,6 +17,11 @@ import { cliReplica, scratchDir } from "../src/sync/testSupport.js";
 const PROJECT = "demo-vault";
 const INVITE = "adobo-sinigang-2026";
 const settle = (ms = 300) => new Promise((r) => setTimeout(r, ms));
+// Waits for something that happens in the background (like a checkpoint upload), instead of guessing how long it takes
+async function eventually(check, what, ms = 15000) {
+  for (const end = Date.now() + ms; Date.now() < end; await settle(200)) if (await check()) return;
+  assert.fail(`timed out waiting for ${what}`);
+}
 
 // Admin access to the emulator (bypasses the rules) for seeding and cleanup
 const emulator = (path, init) => fetch(`http://127.0.0.1:8080/v1/projects/${PROJECT}/databases/(default)/documents${path}`, { ...init, headers: { Authorization: "Bearer owner", "Content-Type": "application/json" } });
@@ -90,7 +95,7 @@ test("the list of changes is append-only and strictly numbered", async () => {
   assert.equal(await remote.appendOp({ cmd: "add_account", args: { name: "Savings" }, at: "2026-10-15 08:00:00", clientId: "x" }), 2);
 });
 
-test("two devices signed in to one account stay identical through Firestore", async () => {
+test("two devices signed in to one account stay identical through Firestore", async (t) => {
   const dir = scratchDir();
   const phoneApp = device();
   const desktopApp = device();
@@ -100,6 +105,7 @@ test("two devices signed in to one account stay identical through Firestore", as
 
   // The desktop brings its existing data along
   const local = cliReplica(join(dir, "local.db"));
+  t.after(() => local.close());
   await local.open();
   await local.apply([
     { seq: 1, cmd: "add_account", args: { name: "BPI" }, at: "2025-05-01 09:00:00" },
@@ -107,13 +113,14 @@ test("two devices signed in to one account stay identical through Firestore", as
   ]);
   const key = vaultKey("Ate Dela Cruz");
   await uploadVault(firestoreRemote(desktopApp.db, user.uid, key), await local.snapshot(), false);
-  local.close();
 
   let phoneHeard = 0;
   const make = (fb, name, onChange = () => {}) => {
     const replica = cliReplica(join(dir, `${name}.db`));
     const engine = createSyncEngine({ remote: firestoreRemote(fb.db, user.uid, key), replica, clientId: name, onChange, checkpointEvery: 5 });
-    return { engine, close: () => { engine.close(); replica.close(); } };
+    // Always stop the replica processes, even if an assertion fails, or the test run never exits
+    t.after(() => { engine.close(); replica.close(); });
+    return { engine, close: () => {} };
   };
   const desktop = make(desktopApp, "desktop");
   const phone = make(phoneApp, "phone", () => phoneHeard++);
@@ -124,23 +131,19 @@ test("two devices signed in to one account stay identical through Firestore", as
   await phone.engine.call("add_account", { name: "GCash" });
   for (let i = 0; i < 6; i++) await desktop.engine.call("transfer_money", { fromAccountId: 1, toAccountId: 2, amount: 100.25, description: `Load ${i}` });
   assert.match(await phone.engine.call("transfer_money", { fromAccountId: 2, toAccountId: 1, amount: 99999, description: "Too much" }), /^ERROR/);
-  await settle(800);
-
   const balances = async (e) => JSON.stringify(await e.call("get_accounts"));
-  assert.equal(await balances(phone.engine), await balances(desktop.engine));
+  await eventually(async () => (await balances(phone.engine)) === (await balances(desktop.engine)), "both devices to agree");
   assert.match(await balances(phone.engine), /"balance":19398.5.*"balance":601.5/);
   assert.ok(phoneHeard > 0, "the phone was told about the desktop's changes");
 
   // A checkpoint was saved, and a brand-new device starts from it
-  const vault = (await getDoc(doc(phoneApp.db, "users", user.uid, "vaults", key))).data();
-  assert.ok(vault.checkpoint?.id.startsWith("s"), JSON.stringify(vault.checkpoint));
+  const vaultRef = doc(phoneApp.db, "users", user.uid, "vaults", key);
+  await eventually(async () => (await getDoc(vaultRef)).data().checkpoint?.id.startsWith("s"), "a regular checkpoint");
   const tabletApp = device();
   await signIn(tabletApp, address, "a good password");
   const tablet = make(tabletApp, "tablet");
   await tablet.engine.open();
-  await settle(800);
-  assert.equal(await balances(tablet.engine), await balances(phone.engine));
-  desktop.close(); phone.close(); tablet.close();
+  await eventually(async () => (await balances(tablet.engine)) === (await balances(phone.engine)), "the tablet to catch up");
 });
 
 test("large checkpoints are split across documents and come back intact", async () => {

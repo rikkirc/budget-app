@@ -30,6 +30,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # A normal run takes about 6 minutes; never let a stuck test hold a runner for hours
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
