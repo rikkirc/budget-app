@@ -26,7 +26,8 @@ What's done, what's next, and what's blocked. Newest entries first.
 ## Next
 
 - [x] Add screenshots (desktop Dashboard, phone Dashboard, Loan Generator) to the README.
-- [ ] Add a Bi-Monthly Budget screenshot once "Rent2" is renamed and the phone layout is fixed.
+- [x] Add a Bi-Monthly Budget screenshot.
+- [ ] Retake the Dashboard pair (desktop + phone) with the updated demo data.
 - [ ] Record a 60-second demo: pay a bill on the phone, watch the desktop update.
 - [ ] Write a half-page case study for the portfolio.
 

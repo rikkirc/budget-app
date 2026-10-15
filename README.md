@@ -11,6 +11,10 @@ The same demo vault on the desktop and on an Android phone, kept in step by live
   <img src="docs/screenshots/phone-dashboard.jpg" alt="The same dashboard on an Android phone" width="200">
 </p>
 
+<img src="docs/screenshots/desktop-budget-summary.png" alt="Bi-Monthly Budget summary: each bill with its due date, amount, and the paycheck that pays it" width="720">
+
+*Bi-Monthly Budget: every bill is assigned to the paycheck that will cover it. Electricity is still TBD, so it's flagged until the amount comes in.*
+
 <img src="docs/screenshots/desktop-loan.png" alt="Loan Generator: a 12-month loan with its full bi-monthly payment schedule" width="480">
 
 *Loan Generator: a ₱10,000 loan turned into a 24-payment bi-monthly schedule, each payment assigned to a paycheck.*
