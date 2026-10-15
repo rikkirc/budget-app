@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { invoke, IS_MOBILE, getSyncSettings, subscribeToChanges } from "./api";
+import { useState, useEffect, useRef } from "react";
+import { invoke, IS_MOBILE, SYNC_AVAILABLE, isSignedIn, onAccountChange, subscribeToChanges } from "./api";
 import Dashboard from "./Dashboard";
 import Budget from "./Budget";
 import Debt from "./Debt";
@@ -12,7 +12,9 @@ export default function App() {
   const [profileName, setProfileName] = useState("");
   const [activeTab, setActiveTab] = useState("Dashboard");
   const [refreshKey, setRefreshKey] = useState(0);
-  const [sync, setSync] = useState(getSyncSettings);
+  // The signed-in family account: undefined while Firebase is still checking, null when not signed in
+  const [account, setAccount] = useState(undefined);
+  const sync = account ?? null;
   const [showSync, setShowSync] = useState(false);
   const [liveLink, setLiveLink] = useState(false);
   const [changedElsewhere, setChangedElsewhere] = useState(false);
@@ -31,29 +33,34 @@ export default function App() {
     });
   }, [isLoggedIn, sync, profileName]);
 
-  // The account's session ended (signed out on every device, or a password reset): lock and ask to sign in again
-  useEffect(() => {
-    const onSignedOut = () => {
-      setSync(null);
-      setIsLoggedIn(false);
-      setShowSync(true);
-      alert("You've been signed out of your account. Please sign in again.");
-    };
-    window.addEventListener("vault:signed-out", onSignedOut);
-    return () => window.removeEventListener("vault:signed-out", onSignedOut);
-  }, []);
+  // Follow the sign-in. If it ends without you signing out here (the password was changed on another device),
+  // lock the vault and ask to sign in again rather than quietly switching to other data.
+  const signingOut = useRef(false);
+  const unlocked = useRef(false);
+  const unlockedSynced = useRef(false); // the open vault is a synced one (not this computer's local vault)
+  unlocked.current = isLoggedIn;
+  useEffect(() => onAccountChange((next) => {
+    setAccount((previous) => {
+      if (previous && !next && !signingOut.current && unlocked.current && unlockedSynced.current) {
+        setIsLoggedIn(false);
+        setShowSync(true);
+        alert("You've been signed out of your account (was the password changed on another device?). Please sign in again.");
+      }
+      signingOut.current = false;
+      return next;
+    });
+  }), []);
 
   const refresh = () => { setChangedElsewhere(false); setRefreshKey(prev => prev + 1); };
 
-  const handleSyncChanged = async () => {
-    const settings = getSyncSettings();
-    setSync(settings);
+  const handleSyncChanged = async ({ signedOut = false } = {}) => {
     setShowSync(false);
     if (!isLoggedIn) return;
-    // The phone has no vault of its own, so disconnecting it locks the vault
-    if (!settings && IS_MOBILE) { setIsLoggedIn(false); setProfileName(""); return; }
+    // The phone has no vault of its own, so signing out locks the vault
+    if (signedOut && IS_MOBILE) { setIsLoggedIn(false); setProfileName(""); return; }
     // Reopen the same profile on whichever side now holds the data
     try { await invoke("login_user", { profile: profileName }); } catch (e) { alert(e); }
+    unlockedSynced.current = isSignedIn();
     refresh();
   };
 
@@ -70,6 +77,7 @@ export default function App() {
       return;
     }
     alert(response);
+    unlockedSynced.current = isSignedIn();
     setIsLoggedIn(true);
     await checkUpcomingRecurringBills();
   };
@@ -111,11 +119,15 @@ export default function App() {
     }
   };
 
-  // The phone always works through the sync server, so it must be connected before the first unlock
+  if (account === undefined) {
+    return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", backgroundColor: "#f3f4f6", color: "#6b7280" }}>Opening Vault…</div>;
+  }
+
+  // The phone always works through a family account, so it must be signed in before the first unlock
   if (!isLoggedIn && (showSync || (IS_MOBILE && !sync))) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", backgroundColor: "#f3f4f6", padding: "20px", boxSizing: "border-box" }}>
-        <SyncSettings profileName="" onDone={handleSyncChanged} onCancel={sync || !IS_MOBILE ? () => setShowSync(false) : null} />
+        <SyncSettings account={account} profileName="" beforeSignOut={() => { signingOut.current = true; }} onDone={handleSyncChanged} onCancel={sync || !IS_MOBILE ? () => setShowSync(false) : null} />
       </div>
     );
   }
@@ -141,11 +153,13 @@ export default function App() {
           >
             🔐 Unlock Vault
           </button>
-          <p style={{ color: "#6b7280", fontSize: "14px", marginTop: "25px", marginBottom: 0 }}>
-            {sync ? `☁️ Signed in as ${sync.email}` : IS_MOBILE ? "" : "💻 This computer only"}
-            {" · "}
-            <button onClick={() => setShowSync(true)} style={{ background: "none", border: "none", color: "#2563eb", cursor: "pointer", fontSize: "14px", padding: 0, textDecoration: "underline" }}>{sync ? "Account" : "Sign in to sync"}</button>
-          </p>
+          {SYNC_AVAILABLE && (
+            <p style={{ color: "#6b7280", fontSize: "14px", marginTop: "25px", marginBottom: 0 }}>
+              {sync ? `☁️ Signed in as ${sync.email}` : IS_MOBILE ? "" : "💻 This computer only"}
+              {" · "}
+              <button onClick={() => setShowSync(true)} style={{ background: "none", border: "none", color: "#2563eb", cursor: "pointer", fontSize: "14px", padding: 0, textDecoration: "underline" }}>{sync ? "Account" : "Sign in to sync"}</button>
+            </p>
+          )}
         </div>
       </div>
     );
@@ -169,9 +183,11 @@ export default function App() {
           <span style={{ fontSize: "16px", fontWeight: "bold", color: "#1f2937", backgroundColor: "#f3f4f6", padding: "10px 15px", borderRadius: "5px", border: "1px solid #d1d5db" }}>
             👤 Vault: {profileName}
           </span>
-          <button onClick={() => setShowSync(true)} title={sync ? `Signed in as ${sync.email} on ${sync.url}` : "Sign in to sync with your phone"} style={{ padding: "10px 15px", cursor: "pointer", fontWeight: "bold", fontSize: "14px", backgroundColor: !sync ? "#f3f4f6" : liveLink ? "#ecfdf5" : "#fff7ed", color: !sync ? "#374151" : liveLink ? "#047857" : "#c2410c", border: "1px solid #d1d5db", borderRadius: "5px" }}>
-            {!sync ? "💻 Local only" : liveLink ? "🟢 Live sync" : "🟠 Reconnecting…"}
-          </button>
+          {SYNC_AVAILABLE && (
+            <button onClick={() => setShowSync(true)} title={sync ? `Signed in as ${sync.email}` : "Sign in to sync with your phone"} style={{ padding: "10px 15px", cursor: "pointer", fontWeight: "bold", fontSize: "14px", backgroundColor: !sync ? "#f3f4f6" : liveLink ? "#ecfdf5" : "#fff7ed", color: !sync ? "#374151" : liveLink ? "#047857" : "#c2410c", border: "1px solid #d1d5db", borderRadius: "5px" }}>
+              {!sync ? "💻 Local only" : liveLink ? "🟢 Live sync" : "🟠 Reconnecting…"}
+            </button>
+          )}
           <button onClick={refresh} style={{ padding: "12px 24px", cursor: "pointer", fontWeight: "bold", fontSize: "16px", backgroundColor: "#0891b2", color: "white", border: "none", borderRadius: "5px", transition: "0.2s" }}>
             🔄 Refresh
           </button>
@@ -185,7 +201,7 @@ export default function App() {
       {showSync && (
         <div onClick={() => setShowSync(false)} style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px", zIndex: 1000 }}>
           <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: "460px" }}>
-            <SyncSettings profileName={profileName} onDone={handleSyncChanged} onCancel={() => setShowSync(false)} />
+            <SyncSettings account={account} profileName={profileName} beforeSignOut={() => { signingOut.current = true; }} onDone={handleSyncChanged} onCancel={() => setShowSync(false)} />
           </div>
         </div>
       )}

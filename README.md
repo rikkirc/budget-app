@@ -10,7 +10,7 @@ A budgeting app for desktop and Android, built with [Tauri](https://tauri.app/),
 - **Loan Generator**: model debt and loan payoff, with Sinking Fund or True Bi-Monthly schedules
 - **Search**: find any bill, loan, or amount
 - **Smart bills**: reminders at login for recurring bills due within 10 days that still need an amount
-- **Phone app + real-time sync** (optional): family members create their own accounts on a free self-hosted server, and every change on one device shows up on their others within a second. See [Family accounts and sync](docs/SYNC_AND_MOBILE.md)
+- **Phone app + real-time sync** (optional): family members create their own accounts on a free Firebase project (no server, no card), and every change on one device shows up on their others within a second. See [Family accounts and sync](docs/SYNC_AND_MOBILE.md)
 
 ## User's Manual
 
@@ -37,23 +37,23 @@ npm run tauri build
 npm test
 ```
 
-runs the frontend logic tests (search). The backend tests run against throwaway databases, never your real vaults:
+runs the frontend tests (search, and the sync engine against real vault-core replicas). The backend tests run against throwaway databases, never your real vaults:
 
 ```bash
 cd vault-core && cargo test   # the business logic shared by every app
-cd server && cargo test       # the sync server
+npm run test:firebase         # sync and security rules on the Firebase emulators (needs Java)
 ```
 
 ## Project layout
 
-- `src/`: the React frontend, shared by the desktop and phone apps. `src/api.js` sends each command to the local vault or the sync server.
-- `vault-core/`: all the business logic (accounts, bills, loans…), shared by the app and the sync server.
+- `src/`: the React frontend, shared by the desktop and phone apps. `src/api.js` sends each command to the local vault, or through the sync engine in `src/sync/` when signed in.
+- `vault-core/`: all the business logic (accounts, bills, loans…), and the rules for applying synced changes.
 - `src-tauri/`: the desktop/mobile app shell.
-- `server/`: the optional sync server with family accounts. Deploy it free on Oracle Cloud with `deploy/`; see [docs/SYNC_AND_MOBILE.md](docs/SYNC_AND_MOBILE.md).
+- `src/firebaseConfig.js` and `firestore.rules`: the optional Firebase sync setup; see [docs/SYNC_AND_MOBILE.md](docs/SYNC_AND_MOBILE.md).
 
 ## Your data
 
-When you unlock a vault without sync, the app creates `<profile_name>_finance_data.db` in `Documents\FinancialCommandCenter\`. When you're signed in to an account, your vaults live on the family sync server instead (see [backups](docs/SYNC_AND_MOBILE.md#backups)). These files hold your personal financial data and live outside the repo, so back that folder up separately. `.gitignore` also excludes any stray `*.db` files so they are never committed.
+When you unlock a vault without sync, the app creates `<profile_name>_finance_data.db` in `Documents\FinancialCommandCenter\`. When you're signed in to an account, each device keeps its own copy of your vaults in the app's data folder, kept in step through Firebase (see [backups](docs/SYNC_AND_MOBILE.md#backups)). These files hold your personal financial data and live outside the repo, so back that folder up separately. `.gitignore` also excludes any stray `*.db` files so they are never committed.
 
 ## Recommended IDE setup
 

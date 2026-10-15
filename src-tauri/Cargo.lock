@@ -333,6 +333,7 @@ name = "budget-app"
 version = "0.2.0"
 dependencies = [
  "dirs",
+ "serde",
  "serde_json",
  "tauri",
  "tauri-build",

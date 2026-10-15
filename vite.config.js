@@ -23,5 +23,7 @@ export default defineConfig({
     target: process.env.TAURI_ENV_PLATFORM == 'windows' ? 'chrome105' : 'safari13',
     minify: !process.env.TAURI_ENV_DEBUG ? 'esbuild' : false,
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
+    // Firebase makes the bundle large, but it ships inside the app rather than being downloaded, so that's fine
+    chunkSizeWarningLimit: 1500,
   },
 });

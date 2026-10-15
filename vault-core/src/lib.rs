@@ -630,6 +630,71 @@ pub fn snapshot(conn: &Connection, scratch: &Path) -> Result<Vec<u8>, String> {
     bytes
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// Sync replicas. With sync on, every change is added to a shared, numbered list (in Firebase). Each device keeps its
+// own copy of the vault and applies that list in order, so every device ends up with exactly the same data.
+// That only works if applying a change gives the same result everywhere: the one clock-dependent value (a
+// transaction's created_at) is therefore taken from the change itself, not from the device applying it.
+// ---------------------------------------------------------------------------------------------------------------------
+
+fn ensure_sync_meta(conn: &Connection) -> Result<(), String> {
+    conn.execute("CREATE TABLE IF NOT EXISTS sync_meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL)", []).map(|_| ()).map_err(|e| format!("ERROR: {}", e))
+}
+
+/// The number of the last change this replica has applied (0 for a brand-new replica)
+pub fn last_applied_seq(conn: &Connection) -> Result<i64, String> {
+    ensure_sync_meta(conn)?;
+    Ok(conn.query_row("SELECT value FROM sync_meta WHERE key = 'last_seq'", [], |r| r.get(0)).unwrap_or(0))
+}
+
+/// Marks the replica as being at change `seq` (after restoring a checkpoint taken at that point)
+pub fn set_applied_seq(conn: &Connection, seq: i64) -> Result<(), String> {
+    ensure_sync_meta(conn)?;
+    conn.execute("INSERT INTO sync_meta (key, value) VALUES ('last_seq', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value", params![seq]).map(|_| ()).map_err(|e| format!("ERROR: {}", e))
+}
+
+/// Applies change number `seq` to a replica, all or nothing. `at` is when the change was made ("YYYY-MM-DD HH:MM:SS",
+/// the maker's local time). Returns {"result": …} or {"error": …}: a change the rules reject (say, insufficient funds)
+/// is still "applied" — it changes nothing, identically on every device.
+/// Fails without touching anything if the change is not the very next one, so a replica can never skip or repeat.
+pub fn apply_op(conn: &Connection, seq: i64, cmd: &str, args: &Value, at: &str) -> Result<Value, String> {
+    let last = last_applied_seq(conn)?;
+    if seq != last + 1 { return Err(format!("ERROR: Change {} can't be applied after change {}", seq, last)); }
+    let valid_at = at.len() == 19 && at.chars().enumerate().all(|(i, c)| match i { 4 | 7 => c == '-', 10 => c == ' ', 13 | 16 => c == ':', _ => c.is_ascii_digit() });
+    if !valid_at { return Err(format!("ERROR: Change {} has an invalid time", seq)); }
+    if !is_mutation(cmd) { return Err(format!("ERROR: Change {} is a read, not a change", seq)); }
+
+    conn.execute_batch("BEGIN IMMEDIATE").map_err(|e| format!("ERROR: Could not start: {}", e))?;
+    let outcome = (|| -> Result<Value, String> {
+        let before: i64 = conn.query_row("SELECT COALESCE(MAX(id), 0) FROM transactions", [], |r| r.get(0)).map_err(|e| e.to_string())?;
+        let result = match dispatch(conn, cmd, args) { Ok(v) => serde_json::json!({ "result": v }), Err(e) => serde_json::json!({ "error": e }) };
+        conn.execute("UPDATE transactions SET created_at = ?1 WHERE id > ?2", params![at, before]).map_err(|e| e.to_string())?;
+        set_applied_seq(conn, seq)?;
+        Ok(result)
+    })();
+    match outcome {
+        Ok(v) => { conn.execute_batch("COMMIT").map_err(|e| format!("ERROR: Could not save: {}", e))?; Ok(v) }
+        Err(e) => { let _ = conn.execute_batch("ROLLBACK"); Err(e) }
+    }
+}
+
+/// Replaces the replica at `path` with a checkpoint (a complete vault file) taken at change `seq`. The new file is
+/// written beside the old one and checked before it is swapped in, so a bad download can never damage the replica.
+pub fn restore_replica(path: &Path, bytes: &[u8], seq: i64) -> Result<Connection, String> {
+    if !bytes.starts_with(b"SQLite format 3\0") { return Err("ERROR: That checkpoint is not a Vault database".into()); }
+    let incoming = path.with_extension("incoming");
+    std::fs::write(&incoming, bytes).map_err(|e| format!("ERROR: {}", e))?;
+    let check = Connection::open(&incoming).and_then(|c| c.query_row("PRAGMA integrity_check", [], |r| r.get::<_, String>(0)));
+    if !matches!(check.as_deref(), Ok("ok")) {
+        let _ = std::fs::remove_file(&incoming);
+        return Err("ERROR: That checkpoint is damaged".into());
+    }
+    std::fs::rename(&incoming, path).map_err(|e| format!("ERROR: {}", e))?;
+    let conn = open_vault_file(path).map_err(|e| format!("ERROR: {}", e))?;
+    set_applied_seq(&conn, seq)?;
+    Ok(conn)
+}
+
 pub fn dispatch(conn: &Connection, cmd: &str, args: &Value) -> Result<Value, String> {
     match cmd {
         "add_account" => { let name: String = arg(args, "name")?; to_json(add_account(conn, &name)) }
@@ -1164,5 +1229,67 @@ mod tests {
         let bytes = snapshot(&conn, &scratch).unwrap();
         assert!(bytes.starts_with(b"SQLite format 3\0"));
         assert!(!scratch.exists());
+    }
+
+    // ---- Sync replicas ----
+
+    fn changes() -> Vec<(&'static str, serde_json::Value)> {
+        vec![
+            ("add_account", serde_json::json!({ "name": "Wallet" })),
+            ("add_account", serde_json::json!({ "name": "GCash" })),
+            ("log_income", serde_json::json!({ "accountId": 1, "amount": 1000.0, "description": "Salary" })),
+            ("transfer_money", serde_json::json!({ "fromAccountId": 1, "toAccountId": 2, "amount": 250.5, "description": "Load" })),
+            ("transfer_money", serde_json::json!({ "fromAccountId": 2, "toAccountId": 1, "amount": 9999.0, "description": "Too much" })),
+            ("add_smart_bill", serde_json::json!({ "name": "Internet", "amount": 1500.0, "dueDate": "2026-11-20", "paydayDate": "2026-11-15", "isRecurring": true })),
+        ]
+    }
+    fn state(conn: &Connection) -> String {
+        let accounts = dispatch(conn, "get_accounts", &serde_json::json!({})).unwrap();
+        let txs = dispatch(conn, "get_all_transactions", &serde_json::json!({})).unwrap();
+        let bills = dispatch(conn, "get_smart_bills", &serde_json::json!({})).unwrap();
+        format!("{} {} {}", accounts, txs, bills)
+    }
+
+    #[test]
+    fn replicas_applying_the_same_changes_end_up_identical() {
+        let phone = test_db();
+        let desktop = test_db();
+        for (i, (cmd, args)) in changes().iter().enumerate() {
+            let at = format!("2026-10-15 08:00:{:02}", i);
+            apply_op(&phone, i as i64 + 1, cmd, args, &at).unwrap();
+            apply_op(&desktop, i as i64 + 1, cmd, args, &at).unwrap();
+        }
+        assert_eq!(state(&phone), state(&desktop));
+        assert_eq!(last_applied_seq(&phone).unwrap(), 6);
+        // The timestamp comes from the change, not the clock of the device applying it
+        assert!(state(&phone).contains("2026-10-15 08:00:02"));
+    }
+
+    #[test]
+    fn rejected_changes_still_count_and_change_nothing() {
+        let conn = test_db();
+        for (i, (cmd, args)) in changes().iter().take(4).enumerate() { apply_op(&conn, i as i64 + 1, cmd, args, "2026-10-15 08:00:00").unwrap(); }
+        let before = state(&conn);
+        let (cmd, args) = &changes()[4];
+        let outcome = apply_op(&conn, 5, cmd, args, "2026-10-15 08:00:00").unwrap();
+        assert!(outcome["result"].as_str().unwrap().starts_with("ERROR"), "{}", outcome);
+        assert_eq!(state(&conn), before);
+        assert_eq!(last_applied_seq(&conn).unwrap(), 5);
+        // Bad arguments are reported as an error result, and also count
+        let outcome = apply_op(&conn, 6, "delete_account", &serde_json::json!({}), "2026-10-15 08:00:00").unwrap();
+        assert!(outcome["error"].is_string());
+        assert_eq!(last_applied_seq(&conn).unwrap(), 6);
+    }
+
+    #[test]
+    fn changes_must_be_applied_strictly_in_order() {
+        let conn = test_db();
+        let add = serde_json::json!({ "name": "Wallet" });
+        assert!(apply_op(&conn, 2, "add_account", &add, "2026-10-15 08:00:00").is_err());
+        apply_op(&conn, 1, "add_account", &add, "2026-10-15 08:00:00").unwrap();
+        assert!(apply_op(&conn, 1, "add_account", &add, "2026-10-15 08:00:00").is_err(), "a change must never be applied twice");
+        assert!(apply_op(&conn, 2, "get_accounts", &serde_json::json!({}), "2026-10-15 08:00:00").is_err(), "reads are never changes");
+        assert!(apply_op(&conn, 2, "add_account", &add, "yesterday").is_err());
+        assert_eq!(last_applied_seq(&conn).unwrap(), 1);
     }
 }

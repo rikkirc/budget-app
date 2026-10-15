@@ -402,15 +402,15 @@ Hidden maintenance buttons for data from older versions of the app. **Fix Stray 
 
 ## 11. Phone app & sync
 
-Vault can run on your Android phone and stay in sync with your desktop in real time. A change on either one shows up on the other within a second. Each family member creates their own private account on a small **sync server** that the family runs for free; [Family accounts and sync](SYNC_AND_MOBILE.md) walks through setting it up.
+Vault can run on your Android phone and stay in sync with your desktop in real time. A change on either one shows up on the other within a second. Each family member creates their own private account, using a free Firebase project that one person sets up once; [Family accounts and sync](SYNC_AND_MOBILE.md) walks through it.
 
-- **Create your account:** click **💻 Local only** in the top bar, choose **Create an account**, and enter the server address, your email, a password and the family invite code. **Write down the recovery code** you're shown; it's how you reset a forgotten password. Then let Vault upload this computer's vault so your phone starts with everything.
+- **Create your account:** click **💻 Local only** in the top bar, choose **Create an account**, and enter your email, a password and the family invite code. Then let Vault upload this computer's vault so your phone starts with everything.
 - **On the phone:** choose **I already have an account**, sign in with the same email and password, then unlock with the **same profile name**.
-- **Forgot your password?** Tap **Forgot password?** and use your recovery code.
-- **Lost your phone?** Click **🟢 Live sync**, then **Lost a phone? Sign out on every device**.
+- **Forgot your password?** Tap **Forgot password?** and Vault emails you a reset link.
+- **Lost your phone?** On another device, click **🟢 Live sync**, then **Change password**. That signs out every other device.
 - **🟢 Live sync** means changes are flowing. **🟠 Reconnecting…** means the link dropped; Vault reconnects by itself.
 - **"Your vault was updated on another device"** appears when a change arrives while you're typing. Tap it to refresh once you've saved.
-- **Offline**, you can still view the last data the device loaded, but changes need a connection. If a change couldn't reach the server, press **🔄 Refresh** to see what was saved before trying again.
+- **Offline**, you can still view the last data the device loaded, but changes need a connection. If a change couldn't be sent, press **🔄 Refresh** to see what was saved before trying again.
 
 ---
 

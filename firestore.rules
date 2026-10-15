@@ -1,0 +1,59 @@
+rules_version = '2';
+
+// Security rules for Vault's family sync. Paste this whole file into Firebase console → Firestore Database → Rules
+// (or deploy it with `npx firebase deploy --only firestore:rules`). See docs/SYNC_AND_MOBILE.md.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isSelf(uid) { return signedIn() && request.auth.uid == uid; }
+    // A family member is someone who joined with a valid invite code
+    function isMember(uid) { return isSelf(uid) && exists(/databases/$(database)/documents/members/$(uid)); }
+
+    // Family invite codes: each document's ID is a code. Create them by hand in the console.
+    // No one can read or list them, so codes can't be discovered; the rules below only check that one exists.
+    match /invites/{code} {
+      allow read, write: if false;
+    }
+
+    // Joining: an account becomes a family member by naming a valid invite code, once
+    match /members/{uid} {
+      allow get: if isSelf(uid);
+      allow create: if isSelf(uid)
+        && request.resource.data.keys().hasOnly(['invite', 'email', 'joinedAt'])
+        && request.resource.data.invite is string
+        && exists(/databases/$(database)/documents/invites/$(request.resource.data.invite));
+      allow update, delete: if false;
+    }
+
+    // Everything a member stores is theirs alone
+    match /users/{uid}/{document=**} {
+      allow read: if isMember(uid);
+    }
+
+    match /users/{uid}/vaults/{vault} {
+      allow create: if isMember(uid) && request.resource.data.nextSeq == 1 && request.resource.data.checkpoint == null;
+      // Adding a change moves nextSeq on by exactly one; publishing a checkpoint leaves it alone
+      allow update: if isMember(uid)
+        && (request.resource.data.nextSeq == resource.data.nextSeq || request.resource.data.nextSeq == resource.data.nextSeq + 1);
+
+      // The list of changes is append-only: each new change takes exactly the next number, and none is ever edited or removed
+      match /ops/{opId} {
+        allow create: if isMember(uid)
+          && request.resource.data.seq is int
+          && int(opId) == request.resource.data.seq
+          && get(/databases/$(database)/documents/users/$(uid)/vaults/$(vault)).data.nextSeq == request.resource.data.seq
+          && getAfter(/databases/$(database)/documents/users/$(uid)/vaults/$(vault)).data.nextSeq == request.resource.data.seq + 1
+          && request.resource.data.keys().hasOnly(['seq', 'cmd', 'args', 'at', 'clientId']);
+        allow update, delete: if false;
+      }
+
+      match /checkpoints/{id} {
+        allow write: if isMember(uid);
+        match /chunks/{chunk} {
+          allow write: if isMember(uid);
+        }
+      }
+    }
+  }
+}

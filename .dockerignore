@@ -1,7 +1,0 @@
-**/target
-node_modules
-dist
-src-tauri
-server/data
-**/*.db
-.git

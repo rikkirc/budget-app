@@ -1,148 +1,92 @@
 # Vault on your phone: family accounts and sync
 
 Vault can keep each family member's phone and computer on the same data in real time. Pay a bill on your phone and
-your desktop shows it within a second, and the other way round.
+your desktop shows it within a second, and the other way round. It runs on **Firebase's free Spark plan**: no
+server to rent, no credit card, and no bill, ever.
 
 ## How it works
 
 ```
-  Juan's PC ─┐                                      ┌─ Juan's phone
-             ├──►  Vault sync server (free Oracle  ◄──┤
-  Maria's PC ┘     Cloud computer, always online)    └─ Maria's phone
+  Juan's phone ─┐                                   ┌─ Maria's phone
+                ├──►  Firebase (Google, free plan)  ◄─┤
+  Juan's PC ────┘     Singapore data centre          └─ Maria's PC
 ```
 
-- **One server for the whole family**, running on a free Oracle Cloud computer. You set it up once.
 - **Everyone makes their own account** with an email, a password and the **family invite code** you choose.
-  You never have to create accounts for anyone. Strangers who find the server can't sign up without the code.
+  You never create accounts for anyone. Without the code, nobody can store anything.
 - **Each account is private.** Juan can't see Maria's vaults, even if they both use the same profile name.
-- **Forgot a password?** At sign-up, everyone gets a **recovery code** to write down. It resets their password
-  without email and without asking you.
-- **Live updates:** when you change something, your other signed-in devices refresh right away. If you're halfway
+- **Forgot a password?** Tap *Forgot password?* and Firebase emails a reset link.
+- **Lost a phone?** Change your password on another device. That signs out every other device.
+- **Live updates:** a change on one device shows up on your others within about a second. If you're halfway
   through typing, the app shows *"Your vault was updated on another device"* instead, so your form isn't wiped.
-- **Offline:** each device keeps the last data it loaded, so you can still look at your balances and bills with no
-  signal. Changes need a connection. Vault tells you when a change couldn't reach the server, and never quietly
-  retries it, so a payment can't be recorded twice.
+- **Offline:** every device keeps its own full copy of your vault, so you can always see your balances and bills.
+  Changes need a connection. Vault tells you if a change couldn't be sent, and never quietly retries it, so a
+  payment can't be recorded twice.
 - **"This computer only"** still works exactly as before. Signing in is optional on the desktop.
+
+### Is it really free?
+
+Yes. The Spark plan has no payment method, so it **cannot** charge you. Its daily limits are far above what a family
+budget uses:
+
+| Spark limit (per day, whole family) | Typical family use                                    |
+|-------------------------------------|-------------------------------------------------------|
+| 20,000 changes saved                | A few dozen (one per payment, transfer, bill…)        |
+| 50,000 reads                        | A few hundred (each change is read once per device)   |
+| 1 GB stored in total                | A few MB, even after years                            |
+
+If a limit were ever reached, syncing would pause until it resets at midnight US Pacific time (about 3 PM
+Philippine time), and you'd see an error, never a charge. **Never click "Upgrade" to the Blaze plan**; nothing in
+Vault needs it.
 
 ---
 
-## Part 1: Set up the server (once, by one person, about 1 hour)
+## Part 1: Set up Firebase (once, by one person, about 10 minutes)
 
-Everything below is free. You need a credit or debit card for Oracle's identity check; Always Free resources are
-not charged.
+### 1. Create the project
 
-### 1. Create the free Oracle Cloud computer
+1. Go to https://console.firebase.google.com and sign in with a Google account.
+2. Click **Create a project** (or *Add project*), name it e.g. `vault-family`, and continue.
+3. When asked about **Google Analytics**, turn it **off**. Vault doesn't need it. Click **Create project**.
 
-1. Sign up at https://www.oracle.com/cloud/free/. When asked for a **Home Region**, choose **Singapore**. It's
-   closest to the Philippines, and you can't change it later.
-2. In the Oracle Cloud console, go to **Compute → Instances → Create instance**:
-   - **Image:** Canonical **Ubuntu** (22.04 or 24.04).
-   - **Shape:** **Ampere VM.Standard.A1.Flex** with 1 OCPU and 6 GB memory. It's labelled *Always Free-eligible*.
-     If Oracle says it's *out of capacity*, try again later, or pick **VM.Standard.E2.1.Micro** (also free; see
-     the note in step 4).
-   - **SSH keys:** choose *Generate a key pair* and **download the private key**. You need it to log in.
-3. Click **Create**. When it's running, copy its **Public IP address**.
-4. Open the web ports. On the instance page, click the **subnet**, then its **Default Security List**, then
-   **Add Ingress Rules**:
-   - Source CIDR `0.0.0.0/0`, IP protocol TCP, destination port **80**
-   - Source CIDR `0.0.0.0/0`, IP protocol TCP, destination port **443**
+### 2. Turn on email sign-in
 
-### 2. Get a free web address (DuckDNS)
+1. In the left menu: **Build → Authentication → Get started**.
+2. Under **Sign-in method**, click **Email/Password**, switch on the first toggle (*Email/Password*), and **Save**.
 
-1. Go to https://www.duckdns.org and sign in (Google or GitHub works).
-2. Add a subdomain, e.g. `delacruz-vault`, and set its **current ip** to your instance's public IP.
-3. Your server address is now `https://delacruz-vault.duckdns.org`.
+### 3. Create the database
 
-### 3. Log in to the server and install Docker
+1. Left menu: **Build → Firestore Database → Create database**.
+2. **Location:** choose **asia-southeast1 (Singapore)**. It's closest to the Philippines, and you can't change it
+   later.
+3. Choose **Start in production mode**, then **Create**.
+4. Open the **Rules** tab, delete everything there, paste the whole contents of
+   [`firestore.rules`](../firestore.rules) from this repository, and click **Publish**.
 
-From your PC, in a terminal (PowerShell on Windows), log in with the key you downloaded:
+### 4. Create the family invite code
 
-```bash
-ssh -i path/to/ssh-key.key ubuntu@YOUR_PUBLIC_IP
-```
+1. Still in Firestore, open the **Data** tab and click **+ Start collection**.
+2. **Collection ID:** `invites`, then **Next**.
+3. **Document ID:** type your family invite code, e.g. `adobo-sinigang-mango-2026`. Make it long and hard to
+   guess: three or four random words plus a number is ideal. The code is what keeps strangers out.
+4. Add one field so the console lets you save: field `note`, type *string*, value `family`. Click **Save**.
 
-Then, on the server:
+To stop new sign-ups later, delete that document. To let someone in again, create a new code the same way.
+Existing accounts keep working either way.
 
-```bash
-# Oracle's Ubuntu images block web traffic with their own firewall, so let ports 80 and 443 through
-sudo iptables -I INPUT 6 -p tcp -m multiport --dports 80,443 -j ACCEPT
-sudo netfilter-persistent save
+### 5. Connect the app to your project
 
-# Install Docker, git and sqlite3 (for backups)
-curl -fsSL https://get.docker.com | sudo sh
-sudo usermod -aG docker ubuntu
-sudo apt-get install -y git sqlite3
-exit
-```
+1. Click the ⚙️ gear next to *Project Overview*, then **Project settings**.
+2. Under **Your apps**, click the **web** icon (`</>`), name it `Vault`, leave *Firebase Hosting* unticked, and
+   click **Register app**.
+3. Firebase shows a block of code with `const firebaseConfig = { apiKey: "…", authDomain: "…", … }`.
+4. Open [`src/firebaseConfig.js`](../src/firebaseConfig.js) in this repository (on GitHub you can click the ✏️
+   pencil to edit it in the browser) and replace the placeholder values with yours. Commit the change.
 
-Log in again with the same `ssh` command, so the Docker permission takes effect.
+These values are **not secret**. Every Firebase app contains them. What protects your data is `firestore.rules`.
 
-> **Using the E2.1.Micro shape (1 GB memory)?** Building the server needs more memory than that, so add swap
-> first: `sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile`
-
-### 4. Start Vault
-
-```bash
-git clone https://github.com/rikkirc/budget-app.git
-cd budget-app/deploy
-cp .env.example .env
-nano .env
-```
-
-Your repository is private, so `git clone` asks for your GitHub username and a **personal access token** in place
-of a password. Create one at https://github.com/settings/tokens with read access to the repository.
-
-In `.env`, set:
-
-- `VAULT_DOMAIN`: your DuckDNS address, without `https://` (e.g. `delacruz-vault.duckdns.org`)
-- `VAULT_INVITE_CODE`: make up a family code, at least 8 characters (e.g. `adobo-sinigang-2026`)
-
-Save with **Ctrl+O**, **Enter**, then **Ctrl+X**. Then start everything:
-
-```bash
-docker compose up -d --build
-```
-
-The first build takes about 5–10 minutes. When it's done, open `https://delacruz-vault.duckdns.org/health` in a
-browser. It should say `ok`. The HTTPS certificate is created and renewed automatically.
-
-### 5. Turn on daily backups
-
-```bash
-crontab -e
-```
-
-Add this line, then save:
-
-```
-0 3 * * * /home/ubuntu/budget-app/deploy/backup.sh >> /home/ubuntu/backup.log 2>&1
-```
-
-Every night at 3 AM this copies all accounts and vaults into `deploy/backups/<date>/` and keeps the last 30 days.
-Now and then, also copy the backups **off** the server to your PC:
-
-```bash
-scp -i path/to/ssh-key.key -r ubuntu@YOUR_PUBLIC_IP:budget-app/deploy/backups ./vault-backups
-```
-
-> **Why copy backups off the server?** Oracle may reclaim Always Free computers that sit almost idle for a long
-> time, and a family budget app is very idle. A copy on your PC means you never depend on the server alone.
-
-### 6. Send your family the details
-
-Give each family member:
-
-1. The **Android app** (see Part 2)
-2. The **server address**, e.g. `https://delacruz-vault.duckdns.org`
-3. The **family invite code**
-
-That's it: they create their own accounts.
-
-### Updating the server later
-
-```bash
-cd ~/budget-app && git pull && cd deploy && docker compose up -d --build
-```
+Committing the file starts a new Android build on GitHub automatically (see Part 2). For the desktop app, build
+it again (`npm run tauri build`) or run it with `npm run tauri dev`.
 
 ---
 
@@ -151,9 +95,9 @@ cd ~/budget-app && git pull && cd deploy && docker compose up -d --build
 ### Android phone
 
 1. On GitHub, open the repository's **Actions** tab, then the **Android app** workflow, then the latest
-   successful run.
+   successful run **after** you committed `firebaseConfig.js`.
 2. Download **vault-android-apk** from *Artifacts* and unzip it to get the `.apk` file.
-3. Copy it to the phone and open it. Allow *Install unknown apps* when Android asks.
+3. Send it to each family member's phone and open it. Allow *Install unknown apps* when Android asks.
 
 ### iOS (later)
 
@@ -162,29 +106,19 @@ The app is already set up for iOS. Building it needs a Mac with Xcode and an App
 
 ## Part 3: Create your account (each family member)
 
-1. Open Vault. On the phone, the account screen appears first. On the desktop, unlock your vault first if you
-   already use Vault there, then click **💻 Local only** in the top bar.
-2. Choose **Create an account**. Enter the server address, your email, a password (at least 8 characters) and
-   the family invite code.
-3. **Write down your recovery code** and keep it safe. It's the only way back in if you forget your password.
-4. **On a desktop that already has your data:** Vault offers to upload this computer's vault. Click **OK** so your
+1. Open Vault.
+   - **On a phone,** the account screen appears first.
+   - **On a desktop that already has your data,** unlock your vault as usual first, then click **💻 Local only** in
+     the top bar.
+2. Choose **Create an account**. Enter your email, a password (at least 8 characters) and the family invite code.
+3. **On a desktop that already has your data:** Vault offers to upload this computer's vault. Click **OK** so your
    phone starts with all your accounts, bills and loans. It never overwrites data already in your account without
    asking.
-5. Unlock with your profile name, e.g. `Juan Dela Cruz`. Use the **same profile name** on every device.
-6. On your other devices, choose **I already have an account** and sign in with the same email and password.
+4. Unlock with your profile name, e.g. `Juan Dela Cruz`. Use the **same profile name** on every device.
+5. On your other devices, choose **I already have an account** and sign in with the same email and password.
 
 The top bar shows **🟢 Live sync** when changes are flowing, or **🟠 Reconnecting…** if the connection dropped
 (Vault reconnects by itself).
-
-### Forgot your password?
-
-On the sign-in screen, tap **Forgot password?**, then enter your email, your recovery code and a new password.
-You get a **new** recovery code (the old one stops working), and you're signed out on your other devices.
-
-### Lost your phone?
-
-On another device, click **🟢 Live sync**, then **Lost a phone? Sign out on every device**, and sign in again on
-the devices you still have.
 
 ### Signing out on the desktop
 
@@ -193,44 +127,56 @@ signed in. Unless you want that old copy, stay signed in.
 
 ---
 
+## Backups
+
+Every device holds a complete copy of each synced vault, so a phone or PC breaking loses nothing. For an extra
+copy, back up the desktop's synced vaults folder now and then:
+
+- **Windows:** `%APPDATA%\com.rikki.budget-app\synced\`
+- **macOS:** `~/Library/Application Support/com.rikki.budget-app/synced/`
+- **Linux:** `~/.local/share/com.rikki.budget-app/synced/`
+
+Each file in it is a normal Vault database.
+
 ## Security notes
 
-- Passwords and recovery codes are stored only as one-way **Argon2 hashes**, and sign-in sessions only as
-  **SHA-256 hashes**. Even someone holding a copy of the server's files can't sign in as anyone.
-- After **5 wrong passwords** (or 5 wrong invite codes), further tries are refused for 15 minutes.
-- All traffic is encrypted with HTTPS. The vault files themselves aren't encrypted on the server, so whoever
-  controls the Oracle account (you) could read them. Family members should know this.
-- To stop new sign-ups, change `VAULT_INVITE_CODE` in `deploy/.env` and run `docker compose up -d`. Existing
-  accounts keep working.
-- A device that hasn't been used for 180 days has to sign in again.
+- Passwords are handled entirely by Firebase Authentication; Vault never stores or sees them.
+- `firestore.rules` makes sure that:
+  - only accounts that joined with a valid invite code can store anything;
+  - each person can only ever read and change their own vaults;
+  - invite codes can't be read or listed by anyone;
+  - the list of changes is append-only, so no change can be edited or deleted afterwards.
+- All traffic is encrypted. As the owner of the Firebase project, you could technically look at family members'
+  data in the Firebase console, the same as with any family-run server. Family members should know this.
+
+---
 
 ## For developers
 
 ```
-vault-core/   All business logic (every command), shared by everything below. `cargo test` here.
-server/       The sync server (axum): accounts, HTTP API and WebSocket change feed. `cargo test` here.
-deploy/       docker-compose (server + Caddy for HTTPS), Caddyfile, nightly backup script.
-src-tauri/    The desktop and mobile app shell; runs vault-core locally when signed out.
-src/api.js    The frontend's single door to the data: the local Tauri backend or the sync server.
+vault-core/        All business logic (every command), plus apply_op: applying the numbered list of changes.
+src-tauri/         The desktop and mobile app shell: local vaults, and this device's sync replicas.
+src/api.js         The single door to the data: the local vault, or the synced vault via the sync engine.
+src/sync/
+  engine.js          Keeps a replica in step with the shared list of changes; checkpoints; offline handling.
+  firestoreRemote.js The shared list of changes in Cloud Firestore.
+  account.js         Family accounts on Firebase Authentication.
+  tauriReplica.js    The replica, run by vault-core through Tauri commands.
+firestore.rules    The security rules (invite codes, privacy, append-only changes).
 ```
 
-Server configuration: `VAULT_INVITE_CODE` (required, 8+ characters), `VAULT_DATA_DIR` (default `data`),
-`PORT` (default `8080`). Accounts live in `<data>/accounts.db`, and each account's vaults in `<data>/users/<id>/`.
+**How sync works.** Each vault has a numbered, append-only list of changes in Firestore
+(`users/{uid}/vaults/{vault}/ops`). A change (e.g. `pay_bill` with its arguments) takes the next number in a
+transaction, and every device applies the list in order to its own SQLite replica using the same vault-core code.
+Every device therefore computes identical results. Transaction timestamps come from the change itself, not the
+applying device's clock. Every 200 changes, a device uploads a checkpoint (the whole vault, in ≤ 900 KB Firestore
+documents), so a new device starts from the latest checkpoint instead of replaying everything. An uploaded desktop
+vault is a special `__restore__` change pointing at a checkpoint.
 
-| Route                              | Auth    | Purpose                                                        |
-|------------------------------------|---------|----------------------------------------------------------------|
-| `GET  /health`                     | none    | Liveness check.                                                |
-| `POST /api/sign-up`                | none    | `{ email, password, inviteCode }` → `{ token, email, recoveryCode }` |
-| `POST /api/sign-in`                | none    | `{ email, password }` → `{ token, email }`                     |
-| `POST /api/reset-password`         | none    | `{ email, recoveryCode, newPassword }` → `{ token, email, recoveryCode }` |
-| `GET  /api/me`                     | session | The signed-in email.                                           |
-| `POST /api/change-password`        | session | `{ currentPassword, newPassword }`                             |
-| `POST /api/sign-out`               | session | Ends this session.                                             |
-| `POST /api/sign-out-everywhere`    | session | Ends every session of this account.                            |
-| `POST /api/login`                  | session | `{ profile }`: opens (or creates) one of your vaults.          |
-| `POST /api/call`                   | session | `{ profile, cmd, args, clientId }`: runs any app command.      |
-| `GET  /api/vault/{profile}`        | session | Downloads a complete copy of one of your vaults.               |
-| `PUT  /api/vault/{profile}`        | session | Uploads a vault. Refuses to overwrite data unless `?replace=true`. |
-| `GET  /api/events?token=…`         | session | WebSocket: `{"type":"changed","profile":…,"clientId":…}` after each change to your vaults. |
+Tests:
 
-"session" means `Authorization: Bearer <token>`, or `?token=` for the WebSocket.
+```bash
+cd vault-core && cargo test   # business logic and replica rules
+npm test                      # sync engine against real vault-core replicas
+npm run test:firebase         # security rules + sync over the Firestore & Auth emulators (needs Java)
+```
