@@ -30,6 +30,13 @@ What's done, what's next, and what's blocked. Newest entries first.
 - [ ] Record a 60-second demo: pay a bill on the phone, watch the desktop update.
 - [ ] Write a half-page case study for the portfolio.
 
+### Bugs to fix later
+- [ ] Phone: bill rows on Bi-Monthly Budget are wider than the screen (buttons don't wrap), so the page slides sideways and "Handle Bill" is cut off.
+- [ ] Phone: content sits under Android's navigation bar (the safe-area inset reads as 0 in the Android WebView).
+- [ ] Phone: summary tables (Budget Summary, Active Loans) cut off the Amount column.
+- [ ] Split-loan labels nest brackets: "Demo Loan 1 (2nd Half (Due))".
+- [ ] Desktop: the loan card only fills the left half of a wide window.
+
 ## Known limits
 
 - Synced data is stored unencrypted in Firestore; anyone who controls the Firebase project can read it. Fine for a family, not something to promise a client.
