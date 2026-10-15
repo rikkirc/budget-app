@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { displayBillName } from "./billNames";
 import { invoke } from "./api";
 
 export default function Budget() {
@@ -93,7 +94,7 @@ export default function Budget() {
   };
 
   const handleSplitBill = async (bill) => {
-    if (!window.confirm(`Split "${bill.name}" into two halves?\n\n• 1st Half: due 15 days earlier, saved to a fund\n• 2nd Half (Due): paid on the real due date, taking the full amount\n\nEvery future month will be split too.`)) return;
+    if (!window.confirm(`Split "${displayBillName(bill.name)}" into two halves?\n\n• 1st Half: due 15 days earlier, saved to a fund\n• 2nd Half (Due): paid on the real due date, taking the full amount\n\nEvery future month will be split too.`)) return;
     const response = await invoke("split_recurring_bill", { billId: bill.id });
     alert(response);
     loadData();
@@ -208,8 +209,8 @@ export default function Budget() {
   const handleUndoReceipt = async (receipt) => {
     const isFundTransfer = receipt.from_account_id && receipt.from_account_id !== 0;
     const confirmMsg = isFundTransfer
-        ? `Undo this Sinking Fund transfer for "${receipt.name}"? The money will move back to its original account.`
-        : `Undo this payment for "${receipt.name}"? The full amount will be refunded to the account it was paid from.`;
+        ? `Undo this Sinking Fund transfer for "${displayBillName(receipt.name)}"? The money will move back to its original account.`
+        : `Undo this payment for "${displayBillName(receipt.name)}"? The full amount will be refunded to the account it was paid from.`;
 
     if (window.confirm(confirmMsg)) {
         const response = isFundTransfer
@@ -328,12 +329,12 @@ export default function Budget() {
 
                     {groupedBills[currentTab].map(bill => (
                         <div key={bill.id} style={{ padding: "15px", backgroundColor: "#f9fafb", borderRadius: "8px", border: "1px solid #e5e7eb" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: activeBillId === bill.id || movingBillId === bill.id ? "15px" : "0" }}>
-                                <div>
-                                    <div style={{ fontWeight: "bold", color: "#374151", fontSize: "16px" }}>{bill.name}</div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", justifyContent: "space-between", alignItems: "center", marginBottom: activeBillId === bill.id || movingBillId === bill.id ? "15px" : "0" }}>
+                                <div style={{ flex: "1 1 180px", minWidth: 0 }}>
+                                    <div style={{ fontWeight: "bold", color: "#374151", fontSize: "16px" }}>{displayBillName(bill.name)}</div>
                                     <div style={{ color: "#dc2626", fontSize: "14px", marginTop: "5px" }}>Target Due Date: {formatDate(bill.due_date).replace(" BILLS", "")}</div>
                                 </div>
-                                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end", gap: "10px", marginLeft: "auto" }}>
                                     {editingAmountId === bill.id ? (
                                         <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
                                             <input type="number" step="0.01" value={editAmountValue} onChange={e => setEditAmountValue(e.target.value)} placeholder={isSplitBill(bill) ? "Full bill" : "0.00"} title={isSplitBill(bill) ? "Enter the FULL bill amount. Each half becomes half of it." : undefined} autoFocus style={{ width: "110px", padding: "6px", borderRadius: "5px", border: "1px solid #9333ea" }} />
@@ -469,12 +470,12 @@ export default function Budget() {
                     const isRecent = index < 3;
                     const isRevealed = revealedReceiptIds.has(receipt.id);
                     return (
-                        <div key={index} style={{ padding: "12px 15px", backgroundColor: "#f3f4f6", borderRadius: "6px", borderLeft: "4px solid #10b981", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <div>
-                                <div style={{ fontWeight: "bold", color: "#1f2937" }}>{receipt.name}</div>
+                        <div key={index} style={{ padding: "12px 15px", backgroundColor: "#f3f4f6", borderRadius: "6px", borderLeft: "4px solid #10b981", display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "space-between", alignItems: "center" }}>
+                            <div style={{ minWidth: 0 }}>
+                                <div style={{ fontWeight: "bold", color: "#1f2937" }}>{displayBillName(receipt.name)}</div>
                                 <div style={{ color: "#6b7280", fontSize: "13px" }}>Original Due: {formatReceiptDate(receipt.due_date)}</div>
                             </div>
-                            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px", marginLeft: "auto" }}>
                                 <div style={{ fontWeight: "bold", color: "#10b981" }}>
                                     ₱{receipt.amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </div>
@@ -517,12 +518,12 @@ export default function Budget() {
         ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "10px", maxHeight: "280px", overflowY: "auto", paddingRight: "8px" }}>
                 {archivedBills.map((archived) => (
-                    <div key={archived.id} style={{ padding: "12px 15px", backgroundColor: "#fee2e2", borderRadius: "6px", borderLeft: "4px solid #ef4444", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div>
-                            <div style={{ fontWeight: "bold", color: "#1f2937", textDecoration: "line-through" }}>{archived.name}</div>
+                    <div key={archived.id} style={{ padding: "12px 15px", backgroundColor: "#fee2e2", borderRadius: "6px", borderLeft: "4px solid #ef4444", display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: "bold", color: "#1f2937", textDecoration: "line-through" }}>{displayBillName(archived.name)}</div>
                             <div style={{ color: "#6b7280", fontSize: "13px" }}>Original Due: {formatReceiptDate(archived.due_date)}</div>
                         </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
+                        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "15px", marginLeft: "auto" }}>
                             <div style={{ fontWeight: "bold", color: "#ef4444" }}>
                                 ₱{archived.amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>

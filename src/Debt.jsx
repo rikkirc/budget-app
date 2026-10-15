@@ -534,7 +534,7 @@ export default function Debt() {
         
         {loans.length === 0 ? <p style={{ fontStyle: "italic", color: "#6b7280" }}>No loans logged yet.</p> : null}
         
-        <div style={{ display: "grid", gap: "15px", gridTemplateColumns: "repeat(auto-fill, minmax(350px, 1fr))" }}>
+        <div style={{ display: "grid", gap: "15px", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))" }}>
           {loans.map(loan => (
             <div key={loan.id} style={{ padding: "20px", backgroundColor: "white", border: "1px solid #e5e7eb", borderRadius: "8px", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>

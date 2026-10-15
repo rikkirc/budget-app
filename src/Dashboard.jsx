@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { displayBillName } from "./billNames";
 import { invoke } from "./api";
 
 export default function Dashboard() {
@@ -92,7 +93,7 @@ export default function Dashboard() {
             {upcomingBills.map((bill, index) => (
               <div key={index} style={{ display: "flex", justifyContent: "space-between", padding: "15px", backgroundColor: "#f9fafb", borderRadius: "8px", border: "1px solid #e5e7eb" }}>
                 <div>
-                  <div style={{ fontWeight: "bold", color: "#374151", fontSize: "16px" }}>{bill.name}</div>
+                  <div style={{ fontWeight: "bold", color: "#374151", fontSize: "16px" }}>{displayBillName(bill.name)}</div>
                   <div style={{ color: "#dc2626", fontSize: "14px", marginTop: "5px" }}>Due: {formatDate(bill.due_date)}</div>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
@@ -117,7 +118,7 @@ export default function Dashboard() {
           <p style={{ fontStyle: "italic", color: "#6b7280" }}>No bills logged yet.</p>
         ) : (
           <div style={{ maxHeight: "320px", overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: "8px" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+            <table className="summary-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
               <thead style={{ position: "sticky", top: 0, backgroundColor: "#f3f4f6" }}>
                 <tr style={{ borderBottom: "2px solid #d1d5db" }}>
                   <th style={{ textAlign: "left", padding: "10px 12px", color: "#6b7280" }}>Bill Name</th>
@@ -129,7 +130,7 @@ export default function Dashboard() {
               <tbody>
                 {allBills.map((bill, index) => (
                   <tr key={bill.id} style={{ backgroundColor: index % 2 === 0 ? "#ffffff" : "#f9fafb", borderBottom: "1px solid #e5e7eb" }}>
-                    <td style={{ padding: "10px 12px", fontWeight: "bold", color: "#374151" }}>{bill.name}</td>
+                    <td style={{ padding: "10px 12px", fontWeight: "bold", color: "#374151" }}>{displayBillName(bill.name)}</td>
                     <td style={{ padding: "10px 12px", color: "#dc2626" }}>{formatDate(bill.due_date)}</td>
                     <td style={{ padding: "10px 12px", textAlign: "right", color: "#374151" }}>
                       {bill.amount === 0 ? <span style={{ color: "#f59e0b", fontStyle: "italic" }}>TBD</span> : `₱${bill.amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
@@ -153,7 +154,7 @@ export default function Dashboard() {
           <p style={{ fontStyle: "italic", color: "#6b7280" }}>No active loans.</p>
         ) : (
           <div style={{ maxHeight: "320px", overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: "8px" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+            <table className="summary-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
               <thead style={{ position: "sticky", top: 0, backgroundColor: "#f3f4f6" }}>
                 <tr style={{ borderBottom: "2px solid #d1d5db" }}>
                   <th style={{ textAlign: "left", padding: "10px 12px", color: "#6b7280" }}>Loan Name</th>

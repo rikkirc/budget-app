@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { displayBillName } from "./billNames";
 import { invoke, IS_MOBILE, SYNC_AVAILABLE, isSignedIn, onAccountChange, subscribeToChanges } from "./api";
 import Dashboard from "./Dashboard";
 import Budget from "./Budget";
@@ -101,7 +102,7 @@ export default function App() {
         const billList = upcomingTBD.map(b => {
           const [year, month, day] = b.due_date.split('-');
           const dueDate = new Date(year, month - 1, day);
-          return `• ${b.name} — due ${dueDate.toLocaleDateString("en-US", { month: "long", day: "2-digit", year: "numeric" })}`;
+          return `• ${displayBillName(b.name)} — due ${dueDate.toLocaleDateString("en-US", { month: "long", day: "2-digit", year: "numeric" })}`;
         }).join("\n");
 
         alert(`💡 You have upcoming utility bill(s) due soon!\n\n${billList}\n\nPlease input the exact amount now if you have the billing statement, so it's ready to pay on time.`);
