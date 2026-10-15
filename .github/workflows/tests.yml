@@ -1,0 +1,62 @@
+# Tests the shared business logic, the sync engine, and the Firebase security rules (on Firebase's local emulators)
+name: Tests
+
+# Runs whenever the code it tests changes, on any branch, and on demand
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "src/**"
+      - "vault-core/**"
+      - "src-tauri/**"
+      - "scripts/**"
+      - "firestore.rules"
+      - "firebase.json"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/tests.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "vault-core/**"
+      - "src-tauri/**"
+      - "scripts/**"
+      - "firestore.rules"
+      - "firebase.json"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/tests.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    # A normal run takes about 6 minutes; never let a stuck test hold a runner for hours
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            vault-core
+            src-tauri
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # The Firestore emulator runs on Java
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - run: cargo test --manifest-path vault-core/Cargo.toml
+      # The app's own Rust tests call its commands through Tauri's IPC exactly as the screens do. They run here on
+      # Linux: on Windows, Tauri test programs can't start (they lack the app's Windows manifest).
+      - name: Install the libraries Tauri needs on Linux
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev
+      - run: npm ci
+      - run: npm run build
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
+      - run: npm test
+      - run: npm run test:firebase

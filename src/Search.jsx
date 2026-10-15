@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./api";
 import { CATEGORIES, GROUPS, buildIndex, search, parseAmountQuery } from "./searchIndex";
 
 const RESULTS_PER_GROUP = 50;

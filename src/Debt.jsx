@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./api";
 
 export default function Debt() {
   const [loans, setLoans] = useState([]);

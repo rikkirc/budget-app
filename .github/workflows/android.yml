@@ -1,0 +1,80 @@
+# Builds the Android app (an installable APK) on GitHub's machines, so no Android Studio is needed on your PC.
+# Download it from the run's "Artifacts" section, copy it to your phone and open it to install.
+name: Android app
+
+# Runs whenever the code it builds changes, on any branch, and on demand
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "src/**"
+      - "src-tauri/**"
+      - "vault-core/**"
+      - "package.json"
+      - "package-lock.json"
+      - "index.html"
+      - "vite.config.js"
+      - ".github/workflows/android.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "src-tauri/**"
+      - "vault-core/**"
+      - "package.json"
+      - "package-lock.json"
+      - "index.html"
+      - "vite.config.js"
+      - ".github/workflows/android.yml"
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    env:
+      NDK_VERSION: 27.0.11902837
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # The action's default also asks for the retired "tools" package, which no longer exists and fails the install
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install the Android NDK
+        run: |
+          sdkmanager --install "ndk;${NDK_VERSION}"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      # The Android project is generated from tauri.conf.json until you commit your own src-tauri/gen/android
+      - name: Generate the Android project
+        run: |
+          if [ ! -d src-tauri/gen/android ]; then npx tauri android init --ci; fi
+
+      # A debug build is signed with Android's standard debug key, so it installs on any phone without extra setup
+      - name: Build the APK
+        run: npx tauri android build --apk --debug --target aarch64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vault-android-apk
+          path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error

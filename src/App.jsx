@@ -1,24 +1,83 @@
-import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { useState, useEffect, useRef } from "react";
+import { invoke, IS_MOBILE, SYNC_AVAILABLE, isSignedIn, onAccountChange, subscribeToChanges } from "./api";
 import Dashboard from "./Dashboard";
 import Budget from "./Budget";
 import Debt from "./Debt";
 import CashFlow from "./CashFlow";
 import Search from "./Search";
+import SyncSettings from "./SyncSettings";
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [profileName, setProfileName] = useState("");
   const [activeTab, setActiveTab] = useState("Dashboard");
   const [refreshKey, setRefreshKey] = useState(0);
+  // The signed-in family account: undefined while Firebase is still checking, null when not signed in
+  const [account, setAccount] = useState(undefined);
+  const sync = account ?? null;
+  const [showSync, setShowSync] = useState(false);
+  const [liveLink, setLiveLink] = useState(false);
+  const [changedElsewhere, setChangedElsewhere] = useState(false);
+
+  // Real-time sync: when the phone (or desktop) changes something, every open screen here reloads its data.
+  // If you're in the middle of typing, it waits and offers a Refresh instead, so your half-filled form isn't wiped.
+  useEffect(() => {
+    if (!isLoggedIn || !sync) return;
+    return subscribeToChanges(profileName, {
+      onStatus: setLiveLink,
+      onChange: () => {
+        const tag = document.activeElement?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") setChangedElsewhere(true);
+        else setRefreshKey(prev => prev + 1);
+      },
+    });
+  }, [isLoggedIn, sync, profileName]);
+
+  // Follow the sign-in. If it ends without you signing out here (the password was changed on another device),
+  // lock the vault and ask to sign in again rather than quietly switching to other data.
+  const signingOut = useRef(false);
+  const unlocked = useRef(false);
+  const unlockedSynced = useRef(false); // the open vault is a synced one (not this computer's local vault)
+  unlocked.current = isLoggedIn;
+  useEffect(() => onAccountChange((next) => {
+    setAccount((previous) => {
+      if (previous && !next && !signingOut.current && unlocked.current && unlockedSynced.current) {
+        setIsLoggedIn(false);
+        setShowSync(true);
+        alert("You've been signed out of your account (was the password changed on another device?). Please sign in again.");
+      }
+      signingOut.current = false;
+      return next;
+    });
+  }), []);
+
+  const refresh = () => { setChangedElsewhere(false); setRefreshKey(prev => prev + 1); };
+
+  const handleSyncChanged = async ({ signedOut = false } = {}) => {
+    setShowSync(false);
+    if (!isLoggedIn) return;
+    // The phone has no vault of its own, so signing out locks the vault
+    if (signedOut && IS_MOBILE) { setIsLoggedIn(false); setProfileName(""); return; }
+    // Reopen the same profile on whichever side now holds the data
+    try { await invoke("login_user", { profile: profileName }); } catch (e) { alert(e); }
+    unlockedSynced.current = isSignedIn();
+    refresh();
+  };
 
   const handleLogin = async () => {
     if (!profileName) {
       alert("Please enter a profile name!");
       return;
     }
-    const response = await invoke("login_user", { profile: profileName });
+    let response;
+    try {
+      response = await invoke("login_user", { profile: profileName });
+    } catch (e) {
+      alert(e);
+      return;
+    }
     alert(response);
+    unlockedSynced.current = isSignedIn();
     setIsLoggedIn(true);
     await checkUpcomingRecurringBills();
   };
@@ -60,6 +119,19 @@ export default function App() {
     }
   };
 
+  if (account === undefined) {
+    return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", backgroundColor: "#f3f4f6", color: "#6b7280" }}>Opening Vault…</div>;
+  }
+
+  // The phone always works through a family account, so it must be signed in before the first unlock
+  if (!isLoggedIn && (showSync || (IS_MOBILE && !sync))) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", backgroundColor: "#f3f4f6", padding: "20px", boxSizing: "border-box" }}>
+        <SyncSettings account={account} profileName="" beforeSignOut={() => { signingOut.current = true; }} onDone={handleSyncChanged} onCancel={sync || !IS_MOBILE ? () => setShowSync(false) : null} />
+      </div>
+    );
+  }
+
   if (!isLoggedIn) {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", backgroundColor: "#f3f4f6" }}>
@@ -81,6 +153,13 @@ export default function App() {
           >
             🔐 Unlock Vault
           </button>
+          {SYNC_AVAILABLE && (
+            <p style={{ color: "#6b7280", fontSize: "14px", marginTop: "25px", marginBottom: 0 }}>
+              {sync ? `☁️ Signed in as ${sync.email}` : IS_MOBILE ? "" : "💻 This computer only"}
+              {" · "}
+              <button onClick={() => setShowSync(true)} style={{ background: "none", border: "none", color: "#2563eb", cursor: "pointer", fontSize: "14px", padding: 0, textDecoration: "underline" }}>{sync ? "Account" : "Sign in to sync"}</button>
+            </p>
+          )}
         </div>
       </div>
     );
@@ -89,9 +168,9 @@ export default function App() {
   return (
     <div style={{ padding: "20px", fontFamily: "Arial, sans-serif", backgroundColor: "#f3f4f6", minHeight: "100vh" }}>
       
-      <div style={{ display: "flex", gap: "10px", marginBottom: "20px", backgroundColor: "white", padding: "15px", borderRadius: "8px", boxShadow: "0 2px 4px rgba(0,0,0,0.1)", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
+      <div className="app-header" style={{ display: "flex", gap: "10px", marginBottom: "20px", backgroundColor: "white", padding: "15px", borderRadius: "8px", boxShadow: "0 2px 4px rgba(0,0,0,0.1)", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
         
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+        <div className="app-tabs" style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
           <button onClick={() => setActiveTab("Dashboard")} style={{ padding: "12px 24px", cursor: "pointer", fontWeight: "bold", fontSize: "16px", backgroundColor: activeTab === "Dashboard" ? "#1e3a8a" : "#e5e7eb", color: activeTab === "Dashboard" ? "white" : "#374151", border: "none", borderRadius: "5px", transition: "0.2s" }}>🏠 Dashboard</button>
           <button onClick={() => setActiveTab("CashFlow")} style={{ padding: "12px 24px", cursor: "pointer", fontWeight: "bold", fontSize: "16px", backgroundColor: activeTab === "CashFlow" ? "#047857" : "#e5e7eb", color: activeTab === "CashFlow" ? "white" : "#374151", border: "none", borderRadius: "5px", transition: "0.2s" }}>💰 Cash Flow</button>
           <button onClick={() => setActiveTab("Budget")} style={{ padding: "12px 24px", cursor: "pointer", fontWeight: "bold", fontSize: "16px", backgroundColor: activeTab === "Budget" ? "#2563eb" : "#e5e7eb", color: activeTab === "Budget" ? "white" : "#374151", border: "none", borderRadius: "5px", transition: "0.2s" }}>📅 Bi-Monthly Budget</button>
@@ -100,11 +179,16 @@ export default function App() {
         </div>
 
         {/* 🚨 NEW: The Profile Name Tag sits right next to the Log Out button! */}
-        <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
+        <div className="app-actions" style={{ display: "flex", alignItems: "center", gap: "15px", flexWrap: "wrap" }}>
           <span style={{ fontSize: "16px", fontWeight: "bold", color: "#1f2937", backgroundColor: "#f3f4f6", padding: "10px 15px", borderRadius: "5px", border: "1px solid #d1d5db" }}>
             👤 Vault: {profileName}
           </span>
-          <button onClick={() => setRefreshKey(prev => prev + 1)} style={{ padding: "12px 24px", cursor: "pointer", fontWeight: "bold", fontSize: "16px", backgroundColor: "#0891b2", color: "white", border: "none", borderRadius: "5px", transition: "0.2s" }}>
+          {SYNC_AVAILABLE && (
+            <button onClick={() => setShowSync(true)} title={sync ? `Signed in as ${sync.email}` : "Sign in to sync with your phone"} style={{ padding: "10px 15px", cursor: "pointer", fontWeight: "bold", fontSize: "14px", backgroundColor: !sync ? "#f3f4f6" : liveLink ? "#ecfdf5" : "#fff7ed", color: !sync ? "#374151" : liveLink ? "#047857" : "#c2410c", border: "1px solid #d1d5db", borderRadius: "5px" }}>
+              {!sync ? "💻 Local only" : liveLink ? "🟢 Live sync" : "🟠 Reconnecting…"}
+            </button>
+          )}
+          <button onClick={refresh} style={{ padding: "12px 24px", cursor: "pointer", fontWeight: "bold", fontSize: "16px", backgroundColor: "#0891b2", color: "white", border: "none", borderRadius: "5px", transition: "0.2s" }}>
             🔄 Refresh
           </button>
           <button onClick={handleLogout} style={{ padding: "12px 24px", cursor: "pointer", fontWeight: "bold", fontSize: "16px", backgroundColor: "#dc2626", color: "white", border: "none", borderRadius: "5px", transition: "0.2s" }}>
@@ -113,6 +197,20 @@ export default function App() {
         </div>
 
       </div>
+
+      {showSync && (
+        <div onClick={() => setShowSync(false)} style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px", zIndex: 1000 }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: "460px" }}>
+            <SyncSettings account={account} profileName={profileName} beforeSignOut={() => { signingOut.current = true; }} onDone={handleSyncChanged} onCancel={() => setShowSync(false)} />
+          </div>
+        </div>
+      )}
+
+      {changedElsewhere && (
+        <div onClick={refresh} style={{ marginBottom: "20px", padding: "12px 15px", backgroundColor: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "8px", color: "#1e40af", fontWeight: "bold", cursor: "pointer" }}>
+          🔄 Your vault was updated on another device. Tap here to refresh.
+        </div>
+      )}
 
       <div>
         {activeTab === "Dashboard" && <Dashboard key={refreshKey} />}
