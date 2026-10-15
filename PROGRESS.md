@@ -8,7 +8,7 @@ What's done, what's next, and what's blocked. Newest entries first.
 - **Sync:** optional real-time sync between devices through Firebase (free Spark plan), with family accounts gated by an invite code. Without sync, each vault stays on the device.
 - **Features:** Dashboard, Cash Flow with per-account history, Bi-Monthly Budget, Loan Generator, Search, smart bill reminders, and editing for accounts, bills and loans.
 - **Docs:** README, User's Manual (Markdown + PDF), sync and mobile setup guide.
-- **Tests:** 39 backend tests and 16 frontend tests (search, bill names, sync engine), Rust backend tests (run on Linux CI), Firebase security-rule tests on the emulators.
+- **Tests:** 39 Rust backend tests (run on Linux CI), 16 frontend tests (search, bill names, sync engine), and Firebase security-rule tests on the emulators.
 
 ## Log
 
