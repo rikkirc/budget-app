@@ -96,7 +96,7 @@ export default function Search({ onNavigate }) {
                   {groupResults.slice(0, RESULTS_PER_GROUP).map(item => {
                     const amount = headline(item);
                     return (
-                      <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", padding: "12px 15px", backgroundColor: "#f9fafb", borderRadius: "8px", border: "1px solid #e5e7eb", opacity: item.isReversed ? 0.6 : 1 }}>
+                      <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", padding: "12px 15px", backgroundColor: "#f3f4f6", borderRadius: "8px", border: "1px solid #d1d5db", opacity: item.isReversed ? 0.6 : 1 }}>
                         <div style={{ minWidth: 0 }}>
                           <div style={{ fontWeight: "bold", color: "#374151" }}>{item.title}</div>
                           <div style={{ color: "#6b7280", fontSize: "13px", marginTop: "3px" }}>{describe(item)}</div>

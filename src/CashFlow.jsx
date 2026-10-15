@@ -6,6 +6,8 @@ export default function CashFlow() {
   const [accounts, setAccounts] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [newAccountName, setNewAccountName] = useState("");
+  const [renamingAccountId, setRenamingAccountId] = useState(null);
+  const [renameValue, setRenameValue] = useState("");
 
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [amount, setAmount] = useState("");
@@ -109,6 +111,14 @@ export default function CashFlow() {
     }
   };
 
+  const handleRenameAccount = async (acc) => {
+    const response = await invoke("rename_account", { accountId: acc.id, name: renameValue });
+    if (response.startsWith("ERROR")) return alert(response);
+    setRenamingAccountId(null);
+    fetchAccounts();
+    fetchTransactions();
+  };
+
   // 🚨 THE FIX: This forces commas into the box as you type!
   const formatMoneyInput = (value, setter) => {
     let rawText = value.replace(/[^0-9.]/g, "");
@@ -146,7 +156,7 @@ export default function CashFlow() {
     <div style={{ backgroundColor: "white", padding: "30px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}>
       <h2 style={{ color: "#047857", marginTop: "0", fontSize: "28px" }}>Cash Flow Manager</h2>
       
-      <div style={{ marginBottom: "20px", padding: "20px", backgroundColor: "#ecfdf5", borderRadius: "8px", border: "1px solid #a7f3d0" }}>
+      <div style={{ marginBottom: "20px", padding: "20px", backgroundColor: "#f3f4f6", borderRadius: "8px", border: "1px solid #d1d5db" }}>
          <h3 style={{ margin: "0 0 10px 0", color: "#065f46" }}>🏦 Add New Account</h3>
          <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
              <input type="text" placeholder="e.g. GCash, BPI..." value={newAccountName} onChange={e => setNewAccountName(e.target.value)} style={{ padding: "10px", borderRadius: "5px", border: "1px solid #ccc", flex: 1 }} />
@@ -168,9 +178,22 @@ export default function CashFlow() {
 
       <div style={{ display: "flex", gap: "15px", flexWrap: "wrap", marginBottom: "30px" }}>
           {accounts.map(acc => (
-              <div key={acc.id} onClick={() => setHistoryFilter(acc.id)} title={`Show ${acc.name}'s transaction history`} style={{ padding: "20px", backgroundColor: activeFilter === acc.id ? "#ecfdf5" : "#f9fafb", border: activeFilter === acc.id ? "2px solid #059669" : "1px solid #e5e7eb", borderRadius: "8px", minWidth: "200px", position: "relative", cursor: "pointer" }}>
-                  <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc.id, acc.name); }} style={{ position: "absolute", top: "10px", right: "10px", background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "16px" }}>🗑️</button>
-                  <div style={{ fontSize: "18px", fontWeight: "bold", color: "#374151" }}>{acc.name}</div>
+              <div key={acc.id} onClick={() => setHistoryFilter(acc.id)} title={`Show ${acc.name}'s transaction history`} style={{ padding: "20px", backgroundColor: activeFilter === acc.id ? "white" : "#f3f4f6", border: activeFilter === acc.id ? "2px solid #059669" : "1px solid #d1d5db", borderRadius: "8px", minWidth: "200px", position: "relative", cursor: "pointer" }}>
+                  {renamingAccountId === acc.id ? (
+                      <div onClick={e => e.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: "5px", cursor: "default" }}>
+                          <input type="text" value={renameValue} onChange={e => setRenameValue(e.target.value)} onKeyDown={e => { if (e.key === "Enter") handleRenameAccount(acc); if (e.key === "Escape") setRenamingAccountId(null); }} autoFocus aria-label="New account name" style={{ flex: 1, minWidth: 0, padding: "6px", borderRadius: "5px", border: "1px solid #059669", fontSize: "16px" }} />
+                          <button onClick={() => handleRenameAccount(acc)} title="Save the new name" style={{ padding: "6px 10px", backgroundColor: "#059669", color: "white", border: "none", borderRadius: "5px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}>✓</button>
+                          <button onClick={() => setRenamingAccountId(null)} title="Cancel" style={{ padding: "6px 10px", backgroundColor: "#e5e7eb", color: "#4b5563", border: "none", borderRadius: "5px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}>✕</button>
+                      </div>
+                  ) : (
+                      <>
+                          <div style={{ position: "absolute", top: "10px", right: "10px", display: "flex", gap: "2px" }}>
+                              <button onClick={(e) => { e.stopPropagation(); setRenamingAccountId(acc.id); setRenameValue(acc.name); }} title={`Rename ${acc.name}`} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "16px" }}>✏️</button>
+                              <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc.id, acc.name); }} title={`Delete ${acc.name}`} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "16px" }}>🗑️</button>
+                          </div>
+                          <div style={{ fontSize: "18px", fontWeight: "bold", color: "#374151", paddingRight: "80px", overflowWrap: "anywhere" }}>{acc.name}</div>
+                      </>
+                  )}
                   
                   {/* 🚨 THE FIX: Adding toLocaleString() for beautiful commas on your balances! */}
                   <div style={{ fontSize: "24px", fontWeight: "bold", color: "#047857", marginTop: "10px" }}>

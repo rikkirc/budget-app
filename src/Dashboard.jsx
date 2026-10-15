@@ -91,7 +91,7 @@ export default function Dashboard() {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
             {upcomingBills.map((bill, index) => (
-              <div key={index} style={{ display: "flex", justifyContent: "space-between", padding: "15px", backgroundColor: "#f9fafb", borderRadius: "8px", border: "1px solid #e5e7eb" }}>
+              <div key={index} style={{ display: "flex", justifyContent: "space-between", padding: "15px", backgroundColor: "#f3f4f6", borderRadius: "8px", border: "1px solid #d1d5db" }}>
                 <div>
                   <div style={{ fontWeight: "bold", color: "#374151", fontSize: "16px" }}>{displayBillName(bill.name)}</div>
                   <div style={{ color: "#dc2626", fontSize: "14px", marginTop: "5px" }}>Due: {formatDate(bill.due_date)}</div>

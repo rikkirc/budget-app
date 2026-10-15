@@ -34,6 +34,9 @@ export default function Debt() {
   const [paydayTwo, setPaydayTwo] = useState("30");
 
   const [expandedLoanId, setExpandedLoanId] = useState(null);
+  const [editingLoanId, setEditingLoanId] = useState(null);
+  const [loanEditName, setLoanEditName] = useState("");
+  const [loanEditAcquired, setLoanEditAcquired] = useState("");
   const [draftSchedule, setDraftSchedule] = useState([]);
 
   useEffect(() => { 
@@ -232,6 +235,24 @@ export default function Debt() {
     }
   };
 
+  const openEditLoan = (loan) => {
+    setEditingLoanId(loan.id);
+    setLoanEditName(loan.name);
+    setLoanEditAcquired(loan.date_acquired || "");
+  };
+
+  // Only the name and date acquired: the amounts and due dates come from the loan's terms and drive its whole payment schedule
+  const handleSaveLoanEdit = async (loan) => {
+    if (!loanEditName.trim()) return alert("Please enter a name for this loan!");
+    const response = await invoke("edit_loan", { loanId: loan.id, name: loanEditName, dateAcquired: loanEditAcquired });
+    alert(response);
+    if (response.startsWith("SUCCESS")) {
+      setEditingLoanId(null);
+      await fetchLoans();
+      await fetchBills();
+    }
+  };
+
   const handleUndoDeleteLoan = async (archivedLoan) => {
     if (window.confirm(`Restore "${archivedLoan.name}"? This will put the loan back on your dashboard and completely rebuild its future payment schedule in your Budget.`)) {
       const scheduleList = generateScheduleList(archivedLoan.next_due_date, archivedLoan.term, archivedLoan.term_type, archivedLoan.frequency, archivedLoan.payment_amount, parseInt(paydayOne, 10), parseInt(paydayTwo, 10));
@@ -365,7 +386,7 @@ export default function Debt() {
         )}
       </div>
 
-      <div style={{ marginTop: "30px", padding: "20px", backgroundColor: "#f9fafb", borderRadius: "8px", border: "1px solid #e5e7eb" }}>
+      <div style={{ marginTop: "30px", padding: "20px", backgroundColor: "#f3f4f6", borderRadius: "8px", border: "1px solid #d1d5db" }}>
         <h3 style={{ marginTop: "0", color: "#374151" }}>+ Log a New Loan & Automate Payments</h3>
         
          <div style={{ display: "flex", gap: "10px", marginBottom: "15px" }}>
@@ -407,7 +428,7 @@ export default function Debt() {
         </div>
 
         {!isManualEntry && principal && interestRate && term && (
-          <div style={{ display: "flex", gap: "25px", flexWrap: "wrap", marginBottom: "15px", padding: "15px", backgroundColor: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: "8px" }}>
+          <div style={{ display: "flex", gap: "25px", flexWrap: "wrap", marginBottom: "15px", padding: "15px", backgroundColor: "white", border: "1px solid #d1d5db", borderRadius: "8px" }}>
             <div>
               <div style={{ fontSize: "12px", color: "#047857", fontWeight: "bold" }}>Total Interest</div>
               <div style={{ fontSize: "16px", fontWeight: "bold", color: "#065f46" }}>₱{calculateLoanTotals().totalInterest.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
@@ -548,7 +569,10 @@ export default function Debt() {
                   </div>
                 </div>
                 
-                <div style={{ display: "flex", gap: "10px" }}>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <button onClick={() => editingLoanId === loan.id ? setEditingLoanId(null) : openEditLoan(loan)} style={{ padding: "6px 12px", backgroundColor: editingLoanId === loan.id ? "#4b5563" : "#f3f4f6", color: editingLoanId === loan.id ? "white" : "#374151", border: "none", borderRadius: "5px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}>
+                    {editingLoanId === loan.id ? "Cancel" : "✏️ Edit"}
+                  </button>
                   <button onClick={() => setExpandedLoanId(expandedLoanId === loan.id ? null : loan.id)} style={{ padding: "6px 12px", backgroundColor: "#e9d5ff", color: "#6b21a8", border: "none", borderRadius: "5px", cursor: "pointer", fontWeight: "bold", fontSize: "12px" }}>
                     {expandedLoanId === loan.id ? "Hide" : "View"}
                   </button>
@@ -558,6 +582,27 @@ export default function Debt() {
                 </div>
               </div>
               
+              {editingLoanId === loan.id && (
+                <div style={{ marginBottom: "15px", padding: "15px", backgroundColor: "#f3f4f6", borderRadius: "8px", border: "1px solid #d1d5db" }}>
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "flex-end" }}>
+                    <div style={{ flex: "2 1 180px" }}>
+                      <label htmlFor={`loan-name-${loan.id}`} style={{ display: "block", fontSize: "13px", fontWeight: "bold", color: "#4b5563", marginBottom: "5px" }}>Loan Name</label>
+                      <input id={`loan-name-${loan.id}`} type="text" value={loanEditName} onChange={e => setLoanEditName(e.target.value)} autoFocus style={{ width: "100%", padding: "10px", borderRadius: "5px", border: "1px solid #ccc" }} />
+                    </div>
+                    <div style={{ flex: "1 1 150px" }}>
+                      <label htmlFor={`loan-acquired-${loan.id}`} style={{ display: "block", fontSize: "13px", fontWeight: "bold", color: "#4b5563", marginBottom: "5px" }}>Date Acquired <span style={{ fontWeight: "normal", color: "#9ca3af" }}>(optional)</span></label>
+                      <input id={`loan-acquired-${loan.id}`} type="date" value={loanEditAcquired} onChange={e => setLoanEditAcquired(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "5px", border: "1px solid #ccc" }} />
+                    </div>
+                    <button onClick={() => handleSaveLoanEdit(loan)} style={{ padding: "10px 20px", backgroundColor: "#9333ea", color: "white", border: "none", borderRadius: "5px", cursor: "pointer", fontWeight: "bold", height: "40px" }}>
+                      Save Changes
+                    </button>
+                  </div>
+                  <p style={{ margin: "10px 0 0 0", fontSize: "12px", color: "#6b7280" }}>
+                    The new name also shows on this loan's bills in the Budget and on its receipts. Amounts and due dates can't be edited, because they set the loan's whole payment schedule.
+                  </p>
+                </div>
+              )}
+
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px", fontSize: "14px", color: "#4b5563" }}>
                 <span>Principal:</span>
                 <span>₱{loan.principal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
