@@ -208,7 +208,8 @@ fn move_bill_allocation_impl(conn: &Connection, bill_id: i32, new_payday: &str) 
 pub fn get_smart_bills(conn: &Connection) -> Vec<SmartBill> { let mut stmt = conn.prepare("SELECT id, name, amount, due_date, payday_date, is_recurring, loan_id, series_id FROM smart_bills").unwrap(); let iter = stmt.query_map([], |row| { let recurring_int: i32 = row.get(5).unwrap_or(0); Ok(SmartBill { id: row.get(0).unwrap_or(0), name: row.get(1).unwrap_or_else(|_| "".to_string()), amount: row.get(2).unwrap_or(0.0), due_date: row.get(3).unwrap_or_else(|_| "".to_string()), payday_date: row.get(4).unwrap_or_else(|_| "".to_string()), is_recurring: recurring_int != 0, loan_id: row.get(6).unwrap_or(0), series_id: row.get(7).unwrap_or(0) }) }).unwrap(); let mut bills = Vec::new(); for b in iter { if let Ok(item) = b { bills.push(item); } } bills }
 pub fn add_loan(conn: &Connection, name: &str, principal: f64, remaining_balance: f64, term: i32, term_type: &str, frequency: &str, payment_amount: f64, due_date: &str, payday_date: &str, total_incurred: f64, due_structure: &str, date_acquired: &str, bill_names: Vec<String>, bill_amounts: Vec<f64>, bill_dues: Vec<String>, bill_paydays: Vec<String>) -> String { let _ = conn.execute("INSERT INTO loans (name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure, date_acquired) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)", params![name, principal, remaining_balance, term, term_type, frequency, payment_amount, due_date, payday_date, total_incurred, due_structure, date_acquired]); let new_loan_id = conn.last_insert_rowid(); for i in 0..bill_names.len() { let _ = conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id) VALUES (?1, ?2, ?3, ?4, ?5)", params![bill_names[i], bill_amounts[i], bill_dues[i], bill_paydays[i], new_loan_id]); } "SUCCESS: Loan generated!".to_string() }
 pub fn get_loans(conn: &Connection) -> Vec<Loan> { let mut stmt = conn.prepare("SELECT id, name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure, date_acquired FROM loans").unwrap(); let iter = stmt.query_map([], |row| { Ok(Loan { id: row.get(0).unwrap_or(0), name: row.get(1).unwrap_or_else(|_| "".to_string()), principal: row.get(2).unwrap_or(0.0), remaining_balance: row.get(3).unwrap_or(0.0), term: row.get(4).unwrap_or(0), term_type: row.get(5).unwrap_or_else(|_| "".to_string()), frequency: row.get(6).unwrap_or_else(|_| "".to_string()), payment_amount: row.get(7).unwrap_or(0.0), next_due_date: row.get(8).unwrap_or_else(|_| "".to_string()), payday_date: row.get(9).unwrap_or_else(|_| "".to_string()), total_incurred: row.get(10).unwrap_or(0.0), due_structure: row.get(11).unwrap_or_else(|_| "Sinking Fund".to_string()), date_acquired: row.get(12).unwrap_or_else(|_| "".to_string()) }) }).unwrap(); let mut loans = Vec::new(); for l in iter { if let Ok(item) = l { loans.push(item); } } loans }
-pub fn delete_loan(conn: &Connection, loan_id: i32) -> String { let mut stmt = conn.prepare("SELECT name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure, date_acquired FROM loans WHERE id = ?1").unwrap(); let mut rows = stmt.query(params![loan_id]).unwrap(); if let Some(row) = rows.next().unwrap() { let name: String = row.get(0).unwrap(); let principal: f64 = row.get(1).unwrap(); let remaining_balance: f64 = row.get(2).unwrap(); let term: i32 = row.get(3).unwrap(); let term_type: String = row.get(4).unwrap(); let frequency: String = row.get(5).unwrap(); let payment_amount: f64 = row.get(6).unwrap(); let next_due_date: String = row.get(7).unwrap(); let payday_date: String = row.get(8).unwrap(); let total_incurred: f64 = row.get(9).unwrap_or(0.0); let due_structure: String = row.get(10).unwrap_or_else(|_| "Sinking Fund".to_string()); let date_acquired: String = row.get(11).unwrap_or_else(|_| "".to_string()); let _ = conn.execute("INSERT INTO archived_loans (original_id, name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure, date_acquired) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)", params![loan_id, name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure, date_acquired]); let search_pattern = format!("{}%", name); let _ = conn.execute("DELETE FROM smart_bills WHERE name LIKE ?1", params![search_pattern]); } let _ = conn.execute("DELETE FROM loans WHERE id = ?1", params![loan_id]); "SUCCESS: Loan moved to Recycle Bin!".to_string() }
+pub fn delete_loan(conn: &Connection, loan_id: i32) -> String { let mut stmt = conn.prepare("SELECT name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure, date_acquired FROM loans WHERE id = ?1").unwrap(); let mut rows = stmt.query(params![loan_id]).unwrap(); if let Some(row) = rows.next().unwrap() { let name: String = row.get(0).unwrap(); let principal: f64 = row.get(1).unwrap(); let remaining_balance: f64 = row.get(2).unwrap(); let term: i32 = row.get(3).unwrap(); let term_type: String = row.get(4).unwrap(); let frequency: String = row.get(5).unwrap(); let payment_amount: f64 = row.get(6).unwrap(); let next_due_date: String = row.get(7).unwrap(); let payday_date: String = row.get(8).unwrap(); let total_incurred: f64 = row.get(9).unwrap_or(0.0); let due_structure: String = row.get(10).unwrap_or_else(|_| "Sinking Fund".to_string()); let date_acquired: String = row.get(11).unwrap_or_else(|_| "".to_string()); let _ = conn.execute("INSERT INTO archived_loans (original_id, name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure, date_acquired) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)", params![loan_id, name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure, date_acquired]); // Only this loan's installments: matched by loan_id (or, for bills from before loan_id existed, by its exact name), never by a prefix that "Car Loan 2" would also match
+ let _ = conn.execute("DELETE FROM smart_bills WHERE loan_id = ?1 OR (loan_id = 0 AND substr(name, 1, length(?2) + 2) = ?2 || ' (')", params![loan_id, name]); } let _ = conn.execute("DELETE FROM loans WHERE id = ?1", params![loan_id]); "SUCCESS: Loan moved to Recycle Bin!".to_string() }
 
 pub fn fund_bill_to_savings(conn: &Connection, bill_id: i32, from_account_id: i32, to_account_id: i32, amount: f64, description: &str) -> String {
         fund_bill_to_savings_impl(&conn, bill_id, from_account_id, to_account_id, amount, description)
@@ -593,13 +594,118 @@ pub fn mark_first_half_handled(conn: &Connection, bill_id: i32, account_name: &s
     "SUCCESS: 1st Half Sinking Fund Logged!".to_string()
 }
 
+// ---- Editing names and details ----
+// Some names carry meaning: loan installments are stored as "Loan (1st Half)", split bills as "Bill (2nd Half (Due))", and a
+// 1st Half saved to a fund gets " (Handled in Account)". So every rename below changes the part people chose and keeps the rest.
+
+// Text the payment rules look for inside names; a name someone types must not contain it, or a plain bill could be taken for a half
+fn has_reserved_text(name: &str) -> bool { ["(1st Half)", "(2nd Half", "(Handled in", "(Due Date)"].iter().any(|t| name.contains(t)) }
+
+fn checked_name(name: &str) -> Result<String, String> {
+    let name = name.trim();
+    if name.is_empty() { return Err("ERROR: Please enter a name.".to_string()); }
+    if has_reserved_text(name) { return Err("ERROR: Names can't include \"(1st Half)\", \"(2nd Half\", \"(Due Date)\" or \"(Handled in\". Vault adds those itself.".to_string()); }
+    Ok(name.to_string())
+}
+
+/// Where the part Vault added begins: " (1st Half)…" or " (2nd Half…" for a split bill, or the whole name if there is none
+fn split_suffix_at(name: &str) -> usize { [" (1st Half)", " (2nd Half"].iter().filter_map(|t| name.find(t)).min().unwrap_or(name.len()) }
+
+/// Renames an account. Bills saved to it show its name in their "(Handled in …)" tag (in the Budget and the loan schedules), so those follow.
+pub fn rename_account(conn: &Connection, account_id: i32, new_name: &str) -> String {
+    let new_name = match checked_name(new_name) { Ok(n) => n, Err(e) => return e };
+    let Ok(old_name) = conn.query_row("SELECT name FROM accounts WHERE id = ?1", params![account_id], |r| r.get::<_, String>(0)) else { return "ERROR: Could not find that account.".to_string(); };
+    if old_name == new_name { return "SUCCESS: Nothing to change.".to_string(); }
+    let taken: bool = conn.query_row("SELECT 1 FROM accounts WHERE lower(name) = lower(?1) AND id != ?2", params![new_name, account_id], |_| Ok(true)).unwrap_or(false);
+    if taken { return format!("ERROR: You already have an account called '{}'.", new_name); }
+    if conn.execute("UPDATE accounts SET name = ?1 WHERE id = ?2", params![new_name, account_id]).is_err() { return "ERROR: Could not rename the account.".to_string(); }
+    let (old_tag, new_tag) = (format!(" (Handled in {})", old_name), format!(" (Handled in {})", new_name));
+    for table in ["smart_bills", "paid_bills"] {
+        let _ = conn.execute(&format!("UPDATE {} SET name = replace(name, ?1, ?2) WHERE instr(name, ?1) > 0", table), params![old_tag, new_tag]);
+    }
+    format!("SUCCESS: Renamed '{}' to '{}'!", old_name, new_name)
+}
+
+/// Edits one unpaid bill that isn't a loan payment: its name, amount and real due date. For a split bill, `amount` is the full
+/// bill and `due_date` is the real due date (the 2nd Half's); both unpaid halves of that month change together.
+/// A new due date also moves the bill to the paycheck the usual rule picks, since the old one may no longer come before it.
+pub fn edit_bill(conn: &Connection, bill_id: i32, name: &str, amount: f64, due_date: &str) -> String {
+    let bill: Option<(String, String, String, i32, i32, i32)> = conn.query_row("SELECT name, due_date, payday_date, loan_id, series_id, is_recurring FROM smart_bills WHERE id = ?1", params![bill_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?))).ok();
+    let Some((old_name, old_due, old_payday, loan_id, series_id, is_recurring)) = bill else { return "ERROR: Could not find that bill. It may have already been paid.".to_string(); };
+    if loan_id != 0 { return "ERROR: Loan payments are edited from Active Loans in the Loan Generator.".to_string(); }
+    let new_base = match checked_name(name) { Ok(n) => n, Err(e) => return e };
+    if !(amount >= 0.0) { return "ERROR: Please enter a valid amount.".to_string(); }
+    if amount == 0.0 && is_recurring == 0 { return "ERROR: Only recurring bills can be left as TBD. Please enter an amount.".to_string(); }
+    let normalized: Option<String> = conn.query_row("SELECT date(?1)", params![due_date], |r| r.get(0)).unwrap_or(None);
+    if normalized.as_deref() != Some(due_date) { return "ERROR: That due date isn't a real calendar date.".to_string(); }
+
+    if series_id == 0 {
+        let payday = if due_date == old_due { old_payday.clone() } else { preceding_payday(conn, due_date) };
+        if conn.execute("UPDATE smart_bills SET name = ?1, amount = ?2, due_date = ?3, payday_date = ?4 WHERE id = ?5", params![new_base, amount, due_date, payday, bill_id]).is_err() { return "ERROR: Could not save the bill.".to_string(); }
+        return edited_message(&old_payday, &payday);
+    }
+
+    // A split bill: find this month's pair from its real due date (the 2nd Half's), as update_bill_amount does
+    let second_half_due: String = if old_name.contains("(1st Half)") { conn.query_row("SELECT date(?1, '+15 days')", params![old_due], |r| r.get(0)).unwrap_or(old_due.clone()) } else { old_due.clone() };
+    let first_half_due: String = conn.query_row("SELECT date(?1, '-15 days')", params![second_half_due], |r| r.get(0)).unwrap_or_default();
+    let mut stmt = conn.prepare("SELECT id, name, payday_date FROM smart_bills WHERE series_id = ?1 AND (due_date = ?2 OR due_date = ?3)").unwrap();
+    let halves: Vec<(i32, String, String)> = stmt.query_map(params![series_id, second_half_due, first_half_due], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).unwrap().filter_map(Result::ok).collect();
+    let first_half_saved = !halves.iter().any(|(_, n, _)| n.contains("(1st Half)"));
+    // The 2nd Half finds its saved 1st Half by the 15 days between them, so that link must not break
+    if due_date != second_half_due && first_half_saved {
+        return "ERROR: This bill's 1st Half is already saved to a fund, so its due date can't change this month. You can still change the name and amount.".to_string();
+    }
+    let new_first_due: String = conn.query_row("SELECT date(?1, '-15 days')", params![due_date], |r| r.get(0)).unwrap_or_default();
+    let mut moved_to = old_payday.clone();
+    for (id, half_name, payday) in &halves {
+        let renamed = format!("{}{}", new_base, &half_name[split_suffix_at(half_name)..]);
+        let is_first = half_name.contains("(1st Half)");
+        let due = if is_first { new_first_due.clone() } else { due_date.to_string() };
+        let new_payday = if due_date == second_half_due { payday.clone() } else { preceding_payday(conn, &due) };
+        if *id == bill_id { moved_to = new_payday.clone(); }
+        let _ = conn.execute("UPDATE smart_bills SET name = ?1, amount = ?2 / 2.0, due_date = ?3, payday_date = ?4 WHERE id = ?5", params![renamed, amount, due, new_payday, id]);
+    }
+    // A 1st Half already saved to a fund still belongs to this month's bill: keep its receipt's name in step
+    let mut stmt = conn.prepare("SELECT id, name FROM paid_bills WHERE series_id = ?1 AND due_date = ?2 AND name LIKE '%(1st Half)%'").unwrap();
+    let receipts: Vec<(i32, String)> = stmt.query_map(params![series_id, first_half_due], |r| Ok((r.get(0)?, r.get(1)?))).unwrap().filter_map(Result::ok).collect();
+    for (id, receipt_name) in receipts {
+        let _ = conn.execute("UPDATE paid_bills SET name = ?1 WHERE id = ?2", params![format!("{}{}", new_base, &receipt_name[split_suffix_at(&receipt_name)..]), id]);
+    }
+    edited_message(&old_payday, &moved_to)
+}
+
+fn edited_message(old_payday: &str, new_payday: &str) -> String {
+    if old_payday == new_payday { "SUCCESS: Bill updated!".to_string() } else { format!("SUCCESS: Bill updated! Its new due date moves it to the {} paycheck.", new_payday) }
+}
+
+/// Edits a loan's name and the date it was taken out. Its installments in the Budget and on receipts are named after it, so they follow.
+/// (Amounts and due dates aren't editable: they come from the loan's terms, and its payment schedule is worked out from them.)
+pub fn edit_loan(conn: &Connection, loan_id: i32, name: &str, date_acquired: &str) -> String {
+    let new_name = match checked_name(name) { Ok(n) => n, Err(e) => return e };
+    if !date_acquired.is_empty() {
+        let normalized: Option<String> = conn.query_row("SELECT date(?1)", params![date_acquired], |r| r.get(0)).unwrap_or(None);
+        if normalized.as_deref() != Some(date_acquired) { return "ERROR: That date acquired isn't a real calendar date.".to_string(); }
+    }
+    let Ok(old_name) = conn.query_row("SELECT name FROM loans WHERE id = ?1", params![loan_id], |r| r.get::<_, String>(0)) else { return "ERROR: Could not find that loan.".to_string(); };
+    let taken: bool = conn.query_row("SELECT 1 FROM loans WHERE lower(name) = lower(?1) AND id != ?2", params![new_name, loan_id], |_| Ok(true)).unwrap_or(false);
+    if taken { return format!("ERROR: You already have a loan called '{}'.", new_name); }
+    if conn.execute("UPDATE loans SET name = ?1, date_acquired = ?2 WHERE id = ?3", params![new_name, date_acquired, loan_id]).is_err() { return "ERROR: Could not save the loan.".to_string(); }
+    if old_name != new_name {
+        // "Old Loan (1st Half)" -> "New Loan (1st Half)", for this loan's installments only (compared as text, so names with % or _ are safe)
+        for table in ["smart_bills", "paid_bills"] {
+            let _ = conn.execute(&format!("UPDATE {} SET name = ?1 || substr(name, length(?2) + 1) WHERE loan_id = ?3 AND substr(name, 1, length(?2) + 2) = ?2 || ' ('", table), params![new_name, old_name, loan_id]);
+        }
+    }
+    "SUCCESS: Loan updated!".to_string()
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // One entry point for every command, shared by the desktop app (local vault) and the sync server (remote vault).
 // Arguments arrive as a JSON object with camelCase keys, exactly as the frontend has always sent them to Tauri.
 // ---------------------------------------------------------------------------------------------------------------------
 
 /// Every command the frontend may call, in the order the dispatcher checks them
-pub const COMMANDS: &[&str] = &["add_account", "get_accounts", "delete_account", "log_income", "log_expense", "transfer_money", "undo_transaction", "get_all_transactions", "get_transactions_page", "add_smart_bill", "update_bill_amount", "split_recurring_bill", "move_bill_allocation", "get_smart_bills", "add_loan", "get_loans", "delete_loan", "fund_bill_to_savings", "pay_bill", "undo_bill_payment", "get_paid_bills", "get_paid_bills_page", "get_archived_loans", "get_completed_loans", "undo_delete_loan", "delete_bill", "get_archived_bills", "undo_delete_bill", "get_sinking_fund_info", "repair_balance_rounding", "repair_loan_ids", "undo_fund_to_savings", "mark_first_half_handled"];
+pub const COMMANDS: &[&str] = &["add_account", "get_accounts", "delete_account", "log_income", "log_expense", "transfer_money", "undo_transaction", "get_all_transactions", "get_transactions_page", "add_smart_bill", "update_bill_amount", "split_recurring_bill", "move_bill_allocation", "get_smart_bills", "add_loan", "get_loans", "delete_loan", "fund_bill_to_savings", "pay_bill", "undo_bill_payment", "get_paid_bills", "get_paid_bills_page", "get_archived_loans", "get_completed_loans", "undo_delete_loan", "delete_bill", "get_archived_bills", "undo_delete_bill", "get_sinking_fund_info", "repair_balance_rounding", "repair_loan_ids", "undo_fund_to_savings", "mark_first_half_handled", "rename_account", "edit_bill", "edit_loan"];
 
 /// Reads never change the vault, so the sync server only notifies other devices after anything else
 pub fn is_mutation(cmd: &str) -> bool { !cmd.starts_with("get_") }
@@ -730,6 +836,9 @@ pub fn dispatch(conn: &Connection, cmd: &str, args: &Value) -> Result<Value, Str
         "repair_loan_ids" => { to_json(repair_loan_ids(conn)) }
         "undo_fund_to_savings" => { let paid_bill_id: i32 = arg(args, "paidBillId")?; to_json(undo_fund_to_savings(conn, paid_bill_id)) }
         "mark_first_half_handled" => { let bill_id: i32 = arg(args, "billId")?; let account_name: String = arg(args, "accountName")?; to_json(mark_first_half_handled(conn, bill_id, &account_name)) }
+        "rename_account" => { let account_id: i32 = arg(args, "accountId")?; let name: String = arg(args, "name")?; to_json(rename_account(conn, account_id, &name)) }
+        "edit_bill" => { let bill_id: i32 = arg(args, "billId")?; let name: String = arg(args, "name")?; let amount: f64 = arg(args, "amount")?; let due_date: String = arg(args, "dueDate")?; to_json(edit_bill(conn, bill_id, &name, amount, &due_date)) }
+        "edit_loan" => { let loan_id: i32 = arg(args, "loanId")?; let name: String = arg(args, "name")?; let date_acquired: String = arg(args, "dateAcquired")?; to_json(edit_loan(conn, loan_id, &name, &date_acquired)) }
         _ => Err(format!("ERROR: Unknown command '{}'", cmd)),
     }
 }
@@ -1144,6 +1253,147 @@ mod tests {
         let info = get_sinking_fund_info_impl(&conn, second);
         assert!(info.found);
         assert_eq!((info.account_id, info.amount), (savings, 1000.0));
+    }
+
+    // ---- Editing ----
+
+    fn names_in(conn: &Connection, table: &str) -> Vec<String> {
+        let mut stmt = conn.prepare(&format!("SELECT name FROM {} ORDER BY due_date, id", table)).unwrap();
+        let rows = stmt.query_map([], |r| r.get(0)).unwrap();
+        rows.map(|r| r.unwrap()).collect()
+    }
+
+    #[test]
+    fn renaming_an_account_updates_the_tags_of_bills_saved_to_it() {
+        let conn = test_db();
+        let bank = fund_account(&conn, "Bank", 5000.0);
+        let fund = add_account(&conn, "Demo Loan sinking Fund");
+        add_account(&conn, "GCash");
+        add_loan_with_halves(&conn, 4, "SLOAN", "Sinking Fund");
+        let first = bill_id_named(&conn, "SLOAN (1st Half)", "2026-11-05");
+        fund_bill_to_savings_impl(&conn, first, bank, fund, 1000.0, "Funded");
+        mark_first_half_handled(&conn, first, "Demo Loan sinking Fund");
+
+        let result = rename_account(&conn, fund, "  Car Fund ");
+        assert!(result.starts_with("SUCCESS"), "{}", result);
+        let name: String = conn.query_row("SELECT name FROM accounts WHERE id = ?1", params![fund], |r| r.get(0)).unwrap();
+        assert_eq!(name, "Car Fund", "spaces around the name are trimmed");
+        assert_eq!(names_in(&conn, "paid_bills"), vec!["SLOAN (1st Half) (Handled in Car Fund)"]);
+        // The 2nd Half still finds the money, now under the new name
+        let info = get_sinking_fund_info_impl(&conn, bill_id_named(&conn, "SLOAN (2nd Half (Due))", "2026-11-20"));
+        assert_eq!((info.found, info.account_name.as_str()), (true, "Car Fund"));
+
+        assert!(rename_account(&conn, fund, "gcash").starts_with("ERROR"), "names stay unique, ignoring case");
+        assert!(rename_account(&conn, fund, "   ").starts_with("ERROR"));
+        assert!(rename_account(&conn, fund, "Fund (Handled in X)").starts_with("ERROR"));
+        assert!(rename_account(&conn, 999, "Ghost").starts_with("ERROR"));
+        assert!(rename_account(&conn, fund, "car fund").starts_with("SUCCESS"), "an account can change the case of its own name");
+    }
+
+    #[test]
+    fn editing_a_plain_bill_changes_it_and_moves_it_to_the_right_paycheck() {
+        let conn = test_db();
+        add_smart_bill_impl(&conn, "Internet", 1499.0, "2026-11-20", "2026-10-31", true, false);
+        let id = bill_id_named(&conn, "Internet", "2026-11-20");
+
+        assert_eq!(edit_bill(&conn, id, "PLDT Fibr", 1699.0, "2026-11-20"), "SUCCESS: Bill updated!");
+        assert_eq!(unpaid_bills(&conn), vec![(id, "PLDT Fibr".to_string(), 1699.0, "2026-11-20".to_string(), "2026-10-31".to_string(), 1, 0)], "same due date: the chosen paycheck stays");
+
+        let result = edit_bill(&conn, id, "PLDT Fibr", 1699.0, "2026-12-05");
+        assert!(result.contains("2026-11-15"), "{}", result);
+        assert_eq!(payday_of(&conn, id), "2026-11-15", "latest payday at least 11 days before Dec 5");
+
+        // Next month's copy keeps the new name
+        let bank = fund_account(&conn, "Bank", 5000.0);
+        pay_bill_impl(&conn, id, bank, 1699.0, "Paid");
+        assert_eq!(names_in(&conn, "smart_bills"), vec!["PLDT Fibr"]);
+
+        assert!(edit_bill(&conn, 999, "X", 1.0, "2026-12-05").starts_with("ERROR"));
+        let one_off = add_bill(&conn, "Gift", 500.0, "2026-12-20", "2026-12-15");
+        assert!(edit_bill(&conn, one_off, "Gift", 0.0, "2026-12-20").starts_with("ERROR"), "only recurring bills can be TBD");
+        assert!(edit_bill(&conn, one_off, "Gift", 500.0, "2026-02-30").starts_with("ERROR"));
+        assert!(edit_bill(&conn, one_off, "Gift (1st Half)", 500.0, "2026-12-20").starts_with("ERROR"));
+    }
+
+    #[test]
+    fn loan_installments_are_not_edited_as_bills() {
+        let conn = test_db();
+        add_loan_with_halves(&conn, 4, "SLOAN", "Sinking Fund");
+        let first = bill_id_named(&conn, "SLOAN (1st Half)", "2026-11-05");
+        assert!(edit_bill(&conn, first, "Other", 1.0, "2026-11-05").contains("Active Loans"));
+        assert_eq!(names_in(&conn, "smart_bills"), vec!["SLOAN (1st Half)", "SLOAN (2nd Half (Due))"]);
+    }
+
+    #[test]
+    fn editing_a_split_bill_changes_both_halves() {
+        let conn = test_db();
+        add_smart_bill_impl(&conn, "Rent", 9000.0, "2026-11-30", "2026-11-15", true, true);
+        let second = bill_id_named(&conn, "Rent (2nd Half (Due))", "2026-11-30");
+
+        let first = bill_id_named(&conn, "Rent (1st Half)", "2026-11-15");
+        assert!(edit_bill(&conn, first, "House Rent", 10000.0, "2026-12-05").starts_with("SUCCESS"), "either half edits the pair");
+        let bills = unpaid_bills(&conn);
+        assert_eq!(bills.iter().map(|b| (b.1.as_str(), b.2, b.3.as_str(), b.4.as_str())).collect::<Vec<_>>(), vec![
+            ("House Rent (1st Half)", 5000.0, "2026-11-20", "2026-10-31"),
+            ("House Rent (2nd Half (Due))", 5000.0, "2026-12-05", "2026-11-15"),
+        ]);
+
+        // Paying the month creates next month's pair under the new name
+        let bank = fund_account(&conn, "Bank", 20000.0);
+        pay_bill_impl(&conn, second, bank, 5000.0, "Paid");
+        assert_eq!(names_in(&conn, "smart_bills"), vec!["House Rent (1st Half)", "House Rent (2nd Half (Due))"]);
+        assert_eq!(balance_of(&conn, bank), 10000.0, "the 2nd Half charged the full new amount");
+    }
+
+    #[test]
+    fn a_split_bill_with_its_1st_half_saved_keeps_its_due_date() {
+        let conn = test_db();
+        let bank = fund_account(&conn, "Bank", 20000.0);
+        let savings = add_account(&conn, "Savings");
+        add_smart_bill_impl(&conn, "Rent", 9000.0, "2026-11-30", "2026-11-15", true, true);
+        let first = bill_id_named(&conn, "Rent (1st Half)", "2026-11-15");
+        fund_bill_to_savings_impl(&conn, first, bank, savings, 4500.0, "Funded");
+        mark_first_half_handled(&conn, first, "Savings");
+        let second = bill_id_named(&conn, "Rent (2nd Half (Due))", "2026-11-30");
+
+        assert!(edit_bill(&conn, second, "Rent", 9000.0, "2026-12-05").starts_with("ERROR"), "moving it would lose the saved 1st Half");
+        assert!(edit_bill(&conn, second, "House Rent", 9000.0, "2026-11-30").starts_with("SUCCESS"));
+        assert_eq!(names_in(&conn, "smart_bills"), vec!["House Rent (2nd Half (Due))"]);
+        assert_eq!(names_in(&conn, "paid_bills"), vec!["House Rent (1st Half) (Handled in Savings)"], "the saved half's receipt follows");
+        let info = get_sinking_fund_info_impl(&conn, second);
+        assert_eq!((info.found, info.account_id, info.amount), (true, savings, 4500.0));
+    }
+
+    #[test]
+    fn editing_a_loan_renames_its_installments_only() {
+        let conn = test_db();
+        let bank = fund_account(&conn, "Bank", 10000.0);
+        add_loan_with_halves(&conn, 4, "Car", "Sinking Fund");
+        add_loan_with_halves(&conn, 5, "Car Loan 2", "Sinking Fund");
+        let first = bill_id_named(&conn, "Car (1st Half)", "2026-11-05");
+        let savings = add_account(&conn, "Savings");
+        fund_bill_to_savings_impl(&conn, first, bank, savings, 1000.0, "Funded");
+
+        assert!(edit_loan(&conn, 4, "Honda Civic", "2026-01-10").starts_with("SUCCESS"));
+        let (name, acquired): (String, String) = conn.query_row("SELECT name, date_acquired FROM loans WHERE id = 4", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        assert_eq!((name.as_str(), acquired.as_str()), ("Honda Civic", "2026-01-10"));
+        let mut unpaid = names_in(&conn, "smart_bills");
+        unpaid.sort();
+        assert_eq!(unpaid, vec!["Car Loan 2 (1st Half)", "Car Loan 2 (2nd Half (Due))", "Honda Civic (2nd Half (Due))"]);
+        assert_eq!(names_in(&conn, "paid_bills"), vec!["Honda Civic (1st Half)"]);
+
+        assert!(edit_loan(&conn, 4, "car loan 2", "").starts_with("ERROR"), "loan names stay unique");
+        assert!(edit_loan(&conn, 4, "Honda", "2026-13-01").starts_with("ERROR"));
+        assert!(edit_loan(&conn, 999, "Ghost", "").starts_with("ERROR"));
+    }
+
+    #[test]
+    fn deleting_a_loan_leaves_loans_with_similar_names_alone() {
+        let conn = test_db();
+        add_loan_with_halves(&conn, 4, "Car", "Sinking Fund");
+        add_loan_with_halves(&conn, 5, "Car Loan 2", "Sinking Fund");
+        delete_loan(&conn, 4);
+        assert_eq!(names_in(&conn, "smart_bills"), vec!["Car Loan 2 (1st Half)", "Car Loan 2 (2nd Half (Due))"]);
     }
 
     #[test]

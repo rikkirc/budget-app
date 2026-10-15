@@ -65,6 +65,9 @@ You'll receive Vault as a **Google Drive link** from the person who shared it wi
 
 When you're sent a new version, install it the same way. On Android, open the new `.apk` and tap **Update**; there's no need to uninstall first. Your data is kept on every device, and everything synced is also safe in your family account.
 
+> [!TIP]
+> **Update every synced device.** If you sync, install the new version on your computer *and* your phone. An older version can't apply changes it doesn't know about (like renaming an account), so it would keep showing the old details.
+
 ---
 
 ## 2. Unlocking your vault
@@ -282,6 +285,10 @@ Income, expenses, and transfers can be undone from the history. Undoing a transf
 > [!CAUTION]
 > **Bill payments are undone elsewhere.** Entries created by paying or funding bills (starting with `Paid:`, `Funded to Savings:`, and their refunds) have no Undo button here. Undo them from **Receipts** on the Bi-Monthly Budget screen, which also puts the bill back.
 
+### Rename an account
+
+Click the ✏️ on an account card, type the new name, and click ✓ (or press Enter). Its balance and history stay as they are. Bills saved to the account follow the new name too: a 1st Half marked *Handled in* that account shows the new name in the Budget, on its receipt, and in the loan's payment schedule. Two accounts can't share a name.
+
 ### Delete an account
 
 Click the 🗑️ on an account card. Vault only deletes accounts that are empty; transfer out any remaining balance first.
@@ -314,11 +321,20 @@ Each tab, such as **💼 October 31, 2026 BILLS**, holds the bills allocated to 
 | Control | What it does |
 |---|---|
 | **⚠️ TBD — Click to Enter Amount** | Appears when a recurring bill has no amount yet. Type the amount and click ✓. |
-| **✏️ Edit** | Changes a recurring bill's amount. |
+| **✏️ Edit** | Changes the bill's name, amount, and due date. See [Edit a bill](#edit-a-bill). Loan installments have no Edit button: edit the loan in **Active Loans** instead. |
 | **✂️ Split** | Splits a recurring bill into a 1st Half and 2nd Half (Due). |
 | **🗑️ Delete** | Moves the bill to the Recycle Bin at the bottom of the screen. |
 | **📅 Move** | Reassigns the bill to a different paycheck. |
 | **Handle Bill** | Pays the bill or saves it to a fund. Greyed out while the amount is TBD. |
+
+### Edit a bill
+
+Click **✏️ Edit** on any bill that isn't a loan installment, change what you need, and click **Save Changes**.
+
+- **Bill Name, Amount, and Due Date** can all change. Recurring bills can leave the amount blank to make it TBD.
+- **A new due date moves the bill** to the latest paycheck at least 11 days before it (the usual safety gap). Use **📅 Move** afterwards to pick a different paycheck.
+- **Split bills** are edited as one bill: type the base name (e.g. `Rent`), the **full** amount, and the real due date (the 2nd Half's). Both halves of that month change together, and next month's pair uses the new name.
+- If a split bill's 1st Half is already saved to a fund, its due date can't change until that month is paid; the name and amount still can.
 
 ### Handle a bill
 
@@ -404,10 +420,11 @@ Enter a loan once and Vault creates every installment as a bill in the Budget, a
 
 - **Active Loans** show each loan's principal and remaining balance. Click **View** for the full payment schedule; each installment is marked **✅ Paid**, **📥 Saved** (a 1st Half sitting in a fund), or *unpaid*.
 - When a payment brings the remaining balance to zero, the loan moves to **✅ Completed Loans** automatically and any leftover installments are cleared.
+- **✏️ Edit** changes a loan's name and its date acquired. Its installments in the Budget and on its receipts are renamed to match. Amounts and due dates can't be edited, because they set the loan's whole payment schedule; to change them, delete the loan and log it again.
 - **🗑️ Delete** moves a loan to the **Loan Recycle Bin** and removes its unpaid installments from the Budget. **↩️ Undo & Restore** brings it back and rebuilds its schedule using the paycheck routine currently entered on this screen.
 
-> [!CAUTION]
-> **Give loans distinct names.** Deleting a loan removes unpaid bills whose names *start with* the loan's name. A loan called `Car` would also clear a bill called `Car Insurance`. Use names that don't overlap, like `Car Loan`.
+> [!NOTE]
+> **Loan names are unique.** Two active loans can't share a name, so their installments are never mixed up. Deleting a loan removes only its own installments.
 
 ---
 
@@ -460,6 +477,7 @@ Deleted items in the Recycle Bins aren't searched.
 
 - **Wrong income, expense, or transfer:** undo it from the history in Cash Flow, then log it correctly.
 - **Paid the wrong bill or from the wrong account:** undo the receipt in the Budget, then handle the bill again.
+- **Typo in a name, or the wrong amount or due date:** use **✏️ Edit** on the account, bill, or loan.
 - **Deleted something by accident:** restore it from the matching Recycle Bin.
 
 ### Start using Vault on a new phone

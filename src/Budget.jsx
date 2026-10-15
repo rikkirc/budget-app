@@ -25,6 +25,10 @@ export default function Budget() {
   const [editingAmountId, setEditingAmountId] = useState(null);
   const [editAmountValue, setEditAmountValue] = useState("");
   const [movingBillId, setMovingBillId] = useState(null);
+  const [editingBillId, setEditingBillId] = useState(null);
+  const [editName, setEditName] = useState("");
+  const [editAmount, setEditAmount] = useState("");
+  const [editDue, setEditDue] = useState("");
   const [moveTargetPayday, setMoveTargetPayday] = useState("");
   const [revealedReceiptIds, setRevealedReceiptIds] = useState(new Set());
   const [receiptOffset, setReceiptOffset] = useState(0);
@@ -63,8 +67,7 @@ export default function Budget() {
   const isSinkingFundFirstHalf = (bill) => {
     if (!bill.name.includes("(1st Half)")) return false;
     if (isSplitBill(bill)) return true;
-    const loanName = bill.name.split(" (")[0];
-    const matchedLoan = loans.find(l => l.name === loanName);
+    const matchedLoan = loans.find(l => l.id === bill.loan_id);
     return matchedLoan ? matchedLoan.due_structure === "Sinking Fund" : true; // default to safe/old behavior if loan not found
   };
 
@@ -109,6 +112,43 @@ export default function Budget() {
     setEditingAmountId(null);
     setEditAmountValue("");
     loadData();
+  };
+
+  // A split bill's halves are "Rent (1st Half)" and "Rent (2nd Half (Due))": people edit "Rent", the full amount and the real due date
+  const baseBillName = (name) => {
+    const cut = [" (1st Half)", " (2nd Half"].map(t => name.indexOf(t)).filter(i => i >= 0);
+    return cut.length > 0 ? name.slice(0, Math.min(...cut)) : name;
+  };
+  const addDays = (dateStr, days) => {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const d = new Date(year, month - 1, day + days);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  const realDueDate = (bill) => isSplitBill(bill) && bill.name.includes("(1st Half)") ? addDays(bill.due_date, 15) : bill.due_date;
+
+  const openEditBill = (bill) => {
+    const full = isSplitBill(bill) ? Math.round(bill.amount * 2 * 100) / 100 : bill.amount;
+    setEditingBillId(bill.id);
+    setEditName(isSplitBill(bill) ? baseBillName(bill.name) : bill.name);
+    setEditAmount(full === 0 ? "" : full.toString());
+    setEditDue(realDueDate(bill));
+    setActiveBillId(null);
+    setMovingBillId(null);
+  };
+
+  const handleSaveEdit = async (bill) => {
+    if (!editName.trim()) return alert("Please enter a name for this bill!");
+    if (!editDue || !isRealDate(editDue)) return alert("Please pick a real due date!");
+    const amount = editAmount === "" ? 0 : parseFloat(editAmount);
+    if (Number.isNaN(amount) || amount < 0) return alert("Please enter a valid amount!");
+    if (amount === 0 && !bill.is_recurring) return alert("Please enter an amount! Only recurring bills can be left as TBD.");
+
+    const response = await invoke("edit_bill", { billId: bill.id, name: editName, amount, dueDate: editDue });
+    alert(response);
+    if (response.startsWith("SUCCESS")) {
+        setEditingBillId(null);
+        loadData();
+    }
   };
 
   const handleProcessBill = async (bill) => {
@@ -313,7 +353,7 @@ export default function Budget() {
                 {sortedPaydays.map(payday => (
                     <button 
                         key={payday}
-                        onClick={() => { setActiveTab(payday); setActiveBillId(null); setMovingBillId(null); }}
+                        onClick={() => { setActiveTab(payday); setActiveBillId(null); setMovingBillId(null); setEditingBillId(null); }}
                         style={{ padding: "10px 20px", backgroundColor: currentTab === payday ? "#2563eb" : "#f3f4f6", color: currentTab === payday ? "white" : "#4b5563", border: "none", borderRadius: "5px", cursor: "pointer", fontWeight: "bold", whiteSpace: "nowrap" }}
                     >
                         💼 {formatDate(payday)}
@@ -328,8 +368,8 @@ export default function Budget() {
                     </div>
 
                     {groupedBills[currentTab].map(bill => (
-                        <div key={bill.id} style={{ padding: "15px", backgroundColor: "#f9fafb", borderRadius: "8px", border: "1px solid #e5e7eb" }}>
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", justifyContent: "space-between", alignItems: "center", marginBottom: activeBillId === bill.id || movingBillId === bill.id ? "15px" : "0" }}>
+                        <div key={bill.id} style={{ padding: "15px", backgroundColor: "#f3f4f6", borderRadius: "8px", border: "1px solid #d1d5db" }}>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", justifyContent: "space-between", alignItems: "center", marginBottom: activeBillId === bill.id || movingBillId === bill.id || editingBillId === bill.id ? "15px" : "0" }}>
                                 <div style={{ flex: "1 1 180px", minWidth: 0 }}>
                                     <div style={{ fontWeight: "bold", color: "#374151", fontSize: "16px" }}>{displayBillName(bill.name)}</div>
                                     <div style={{ color: "#dc2626", fontSize: "14px", marginTop: "5px" }}>Target Due Date: {formatDate(bill.due_date).replace(" BILLS", "")}</div>
@@ -357,17 +397,17 @@ export default function Budget() {
                                                     </div>
                                                 )}
                                             </div>
-                                            {bill.is_recurring && (
-                                                <button onClick={() => { setEditingAmountId(bill.id); setEditAmountValue((isSplitBill(bill) ? bill.amount * 2 : bill.amount).toString()); }} style={{ padding: "4px 8px", backgroundColor: "#f3f4f6", color: "#6b7280", border: "1px solid #d1d5db", borderRadius: "4px", cursor: "pointer", fontSize: "11px" }}>
-                                                    ✏️ Edit
-                                                </button>
-                                            )}
                                         </div>
                                     )}
                                     {bill.is_recurring && <span style={{ fontSize: "16px" }} title={isSplitBill(bill) ? "Recurring bill, split into halves" : "Recurring bill"}>{isSplitBill(bill) ? "🔁✂️" : "🔁"}</span>}
                                     {bill.is_recurring && bill.loan_id === 0 && !isSplitBill(bill) && (
                                         <button onClick={() => handleSplitBill(bill)} title="Split into a 1st Half and 2nd Half (Due)" style={{ padding: "8px 12px", backgroundColor: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe", borderRadius: "5px", cursor: "pointer", fontWeight: "bold" }}>
                                             ✂️ Split
+                                        </button>
+                                    )}
+                                    {bill.loan_id === 0 && (
+                                        <button onClick={() => editingBillId === bill.id ? setEditingBillId(null) : openEditBill(bill)} style={{ padding: "8px 12px", backgroundColor: editingBillId === bill.id ? "#4b5563" : "white", color: editingBillId === bill.id ? "white" : "#374151", border: "1px solid #d1d5db", borderRadius: "5px", cursor: "pointer", fontWeight: "bold" }}>
+                                            {editingBillId === bill.id ? "Cancel" : "✏️ Edit"}
                                         </button>
                                     )}
                                     <button onClick={() => handleDeleteBill(bill.id)} style={{ padding: "8px 12px", backgroundColor: "#ef4444", color: "white", border: "none", borderRadius: "5px", cursor: "pointer", fontWeight: "bold" }}>
@@ -377,14 +417,14 @@ export default function Budget() {
                                         const opening = movingBillId !== bill.id;
                                         setMovingBillId(opening ? bill.id : null);
                                         setMoveTargetPayday("");
-                                        if (opening) setActiveBillId(null);
+                                        if (opening) { setActiveBillId(null); setEditingBillId(null); }
                                     }} style={{ padding: "8px 12px", backgroundColor: movingBillId === bill.id ? "#4b5563" : "#f3f4f6", color: movingBillId === bill.id ? "white" : "#374151", border: "1px solid #d1d5db", borderRadius: "5px", cursor: "pointer", fontWeight: "bold" }}>
                                         {movingBillId === bill.id ? "Cancel" : "📅 Move"}
                                     </button>
                                     <button onClick={() => {
                                         const opening = activeBillId !== bill.id;
                                         setActiveBillId(opening ? bill.id : null);
-                                        if (opening) setMovingBillId(null);
+                                        if (opening) { setMovingBillId(null); setEditingBillId(null); }
                                         if (opening) setActionType(isSinkingFundFirstHalf(bill) ? "FUND" : "PAY");
                                     }} disabled={bill.amount === 0} style={{ padding: "8px 16px", backgroundColor: bill.amount === 0 ? "#d1d5db" : "#2563eb", color: "white", border: "none", borderRadius: "5px", cursor: bill.amount === 0 ? "not-allowed" : "pointer", fontWeight: "bold" }}>
                                         {activeBillId === bill.id ? "Cancel" : "Handle Bill"}
@@ -392,8 +432,34 @@ export default function Budget() {
                                 </div>
                             </div>
 
+                            {editingBillId === bill.id && (
+                                <div style={{ padding: "15px", backgroundColor: "white", borderRadius: "8px", border: "1px solid #d1d5db" }}>
+                                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "flex-end" }}>
+                                        <div style={{ flex: "2 1 180px" }}>
+                                            <label htmlFor={`edit-name-${bill.id}`} style={{ display: "block", fontSize: "13px", fontWeight: "bold", color: "#4b5563", marginBottom: "5px" }}>Bill Name</label>
+                                            <input id={`edit-name-${bill.id}`} type="text" value={editName} onChange={e => setEditName(e.target.value)} autoFocus style={{ width: "100%", padding: "10px", borderRadius: "5px", border: "1px solid #ccc" }} />
+                                        </div>
+                                        <div style={{ flex: "1 1 120px" }}>
+                                            <label htmlFor={`edit-amount-${bill.id}`} style={{ display: "block", fontSize: "13px", fontWeight: "bold", color: "#4b5563", marginBottom: "5px" }}>{isSplitBill(bill) ? "Full Amount (₱)" : "Amount (₱)"} {bill.is_recurring && <span style={{ fontWeight: "normal", color: "#9ca3af" }}>(blank = TBD)</span>}</label>
+                                            <input id={`edit-amount-${bill.id}`} type="number" step="0.01" value={editAmount} onChange={e => setEditAmount(e.target.value)} placeholder={bill.is_recurring ? "TBD" : "0.00"} style={{ width: "100%", padding: "10px", borderRadius: "5px", border: "1px solid #ccc" }} />
+                                        </div>
+                                        <div style={{ flex: "1 1 150px" }}>
+                                            <label htmlFor={`edit-due-${bill.id}`} style={{ display: "block", fontSize: "13px", fontWeight: "bold", color: "#4b5563", marginBottom: "5px" }}>{isSplitBill(bill) ? "Real Due Date (2nd Half)" : "Due Date"}</label>
+                                            <input id={`edit-due-${bill.id}`} type="date" value={editDue} onChange={e => setEditDue(e.target.value)} onBlur={e => { if (!isRealDate(e.target.value)) { alert("That date doesn't exist on the calendar! Please pick a valid date."); setEditDue(realDueDate(bill)); } }} style={{ width: "100%", padding: "10px", borderRadius: "5px", border: "1px solid #ccc" }} />
+                                        </div>
+                                        <button onClick={() => handleSaveEdit(bill)} style={{ padding: "10px 20px", backgroundColor: "#059669", color: "white", border: "none", borderRadius: "5px", cursor: "pointer", fontWeight: "bold", height: "40px" }}>
+                                            Save Changes
+                                        </button>
+                                    </div>
+                                    <p style={{ margin: "10px 0 0 0", fontSize: "12px", color: "#6b7280" }}>
+                                        {isSplitBill(bill) ? "Changes both halves of this month's bill: each half is half the full amount, and the 1st Half is due 15 days before the real due date. " : ""}
+                                        A new due date also moves the bill to the paycheck at least 11 days before it. Use 📅 Move afterwards to pick a different one.
+                                    </p>
+                                </div>
+                            )}
+
                             {movingBillId === bill.id && (
-                                <div style={{ padding: "15px", backgroundColor: "#f9fafb", borderRadius: "8px", border: "1px solid #d1d5db" }}>
+                                <div style={{ padding: "15px", backgroundColor: "white", borderRadius: "8px", border: "1px solid #d1d5db" }}>
                                     <p style={{ margin: "0 0 10px 0", fontSize: "13px", color: "#4b5563" }}>
                                         Move this bill from the <strong>{formatDate(bill.payday_date).replace(" BILLS", "")}</strong> paycheck to another one. Only this occurrence moves.
                                     </p>
