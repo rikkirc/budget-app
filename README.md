@@ -2,6 +2,19 @@
 
 A budgeting app for desktop and Android, built with [Tauri](https://tauri.app/), React, and Vite. Each profile gets its own SQLite "vault". By default it stays on your machine; turn on **sync** to use the same vault from your phone, updated in real time.
 
+## Screenshots
+
+The same demo vault on the desktop and on an Android phone, kept in step by live sync.
+
+<p>
+  <img src="docs/screenshots/desktop-dashboard.png" alt="Desktop dashboard showing total cash, total debt, and the next 5 upcoming bills" width="640">
+  <img src="docs/screenshots/phone-dashboard.jpg" alt="The same dashboard on an Android phone" width="200">
+</p>
+
+<img src="docs/screenshots/desktop-loan.png" alt="Loan Generator: a 12-month loan with its full bi-monthly payment schedule" width="480">
+
+*Loan Generator: a ₱10,000 loan turned into a 24-payment bi-monthly schedule, each payment assigned to a paycheck.*
+
 ## Features
 
 - **Dashboard**: an overview of your accounts and finances, with the total of the next 5 upcoming bills
