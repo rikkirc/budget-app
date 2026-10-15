@@ -27,9 +27,12 @@ What's done, what's next, and what's blocked. Newest entries first.
 
 - [x] Add screenshots (desktop Dashboard, phone Dashboard, Loan Generator) to the README.
 - [x] Add a Bi-Monthly Budget screenshot.
-- [ ] Retake the Dashboard pair (desktop + phone) with the updated demo data.
+- [x] Retake the Dashboard pair (desktop + phone) with the updated demo data.
 - [ ] Record a 60-second demo: pay a bill on the phone, watch the desktop update.
 - [ ] Write a half-page case study for the portfolio.
+
+### Planned features
+- [ ] Edit and rename accounts in Cash Flow (e.g. rename "Demo Loan sinking Fund"). The new name should also show in loan schedules and Receipts.
 
 ### Bugs to fix later
 - [ ] Phone: bill rows on Bi-Monthly Budget are wider than the screen (buttons don't wrap), so the page slides sideways and "Handle Bill" is cut off.
