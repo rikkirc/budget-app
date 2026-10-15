@@ -57,7 +57,7 @@ test("Loans category searches active and completed loans by name", () => {
 
 test("Amount category finds bills, loans, and transactions and says which amount matched", () => {
   const results = search(items, "1,500", "amount");
-  assert.deepEqual(titles(results), ["bill:Internet (1st Half)", "bill:Internet (2nd Half (Due))", "transaction:Groceries"]);
+  assert.deepEqual(titles(results), ["bill:Internet — 1st Half", "bill:Internet — 2nd Half (Due)", "transaction:Groceries"]);
   assert.equal(results[0].matchedAmount.label, "full installment");
 
   const loanHit = search(items, "4125.87", "amount");

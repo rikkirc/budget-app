@@ -3,8 +3,9 @@
 body { margin: 0; -webkit-text-size-adjust: 100%; }
 
 @media (max-width: 700px) {
-  /* Respect the notch and the home bar on modern phones */
-  #root > div { padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom)) !important; }
+  /* Respect the notch and the home bar on modern phones. Android's WebView reports the bottom inset as 0 even when
+     the navigation bar covers the page, so always leave room for it (Android's nav bar is up to 48px tall). */
+  #root > div { padding: max(10px, env(safe-area-inset-top)) 10px max(64px, calc(env(safe-area-inset-bottom) + 16px)) !important; }
 
   /* Big buttons shrink to thumb size */
   #root button[style*="font-size: 16px"] { padding: 10px 12px !important; font-size: 14px !important; }
@@ -21,10 +22,16 @@ body { margin: 0; -webkit-text-size-adjust: 100%; }
   /* Nothing is allowed to be wider than the phone */
   #root input, #root select, #root textarea { max-width: 100%; font-size: 16px !important; } /* 16px stops iOS zooming in on focus */
   #root [style*="min-width: 250px"], #root [style*="min-width: 150px"] { min-width: 100% !important; }
-  #root [style*="minmax(350px"] { grid-template-columns: 1fr !important; }
 
   /* Wide tables scroll sideways inside their card instead of stretching the page */
   #root table { display: block; overflow-x: auto; white-space: nowrap; }
+
+  /* The Dashboard's summary tables fit the screen instead: text wraps so every column, amounts included, stays visible */
+  #root table.summary-table { display: table; white-space: normal; font-size: 12px !important; }
+  #root .summary-table th, #root .summary-table td { padding: 8px 4px !important; }
+  #root .summary-table th:first-child, #root .summary-table td:first-child { padding-left: 8px !important; }
+  #root .summary-table th:last-child, #root .summary-table td:last-child { padding-right: 8px !important; }
+
 
   #root h1 { font-size: 22px !important; }
   #root h2 { font-size: 19px !important; }

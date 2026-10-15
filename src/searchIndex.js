@@ -1,4 +1,5 @@
 // Search across bills, loans, and transactions. Kept free of React so it can be tested with `npm test`.
+import { displayBillName } from "./billNames.js";
 
 export const CATEGORIES = [
   { id: "all", label: "🔎 Everything", placeholder: "Search names, descriptions, or amounts..." },
@@ -44,11 +45,11 @@ const isHalf = (name) => /\((1st|2nd) Half/.test(name);
 export function buildIndex({ bills = [], receipts = [], loans = [], completedLoans = [], transactions = [] }) {
   return [
     ...bills.map(b => ({
-      kind: "bill", id: `bill-${b.id}`, title: b.name, text: b.name, date: b.due_date, payday: b.payday_date,
+      kind: "bill", id: `bill-${b.id}`, title: displayBillName(b.name), text: b.name, date: b.due_date, payday: b.payday_date,
       amounts: [{ label: "amount", value: b.amount }, ...(isHalf(b.name) ? [{ label: "full installment", value: b.amount * 2 }] : [])],
     })),
     ...receipts.map(r => ({
-      kind: "receipt", id: `receipt-${r.id}`, title: r.name, text: r.name, date: r.due_date,
+      kind: "receipt", id: `receipt-${r.id}`, title: displayBillName(r.name), text: r.name, date: r.due_date,
       amounts: [{ label: "amount", value: r.amount }],
     })),
     ...loans.map(l => ({

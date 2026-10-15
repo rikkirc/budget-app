@@ -340,8 +340,8 @@ True Bi-Monthly loans never show this prompt; each half pays only itself.
 
 Splitting lets you save for a big monthly bill, like rent or tuition, from both paychecks. It works exactly like a Sinking Fund loan:
 
-- **Name (1st Half)** is due 15 days before the real due date and is saved to a fund.
-- **Name (2nd Half (Due))** is due on the real due date and pays the full bill.
+- **Name — 1st Half** is due 15 days before the real due date and is saved to a fund.
+- **Name — 2nd Half (Due)** is due on the real due date and pays the full bill.
 
 Split a new bill by ticking **🔁 Recurring** and then **✂️ Split into Bi-Monthly Halves**. The form then asks for the **Full Amount** and the **2nd Half Paycheck**; Vault picks the 1st Half's paycheck with the 10-day rule. To split an existing recurring bill, click its **✂️ Split** button.
 
@@ -398,7 +398,7 @@ Enter a loan once and Vault creates every installment as a bill in the Budget, a
 
 1. Click **+ Preview Draft Schedule**. Vault lists every installment with its due date, amount, and suggested paycheck.
 2. Change any **Allocate to Paycheck** date you want to adjust.
-3. Click **✅ Confirm & Save Loan**. Every installment appears in the Bi-Monthly Budget, named like **Loan (1st Half)**, **Loan (2nd Half (Due))**, or **Loan (Due Date)**.
+3. Click **✅ Confirm & Save Loan**. Every installment appears in the Bi-Monthly Budget, named like **Loan — 1st Half**, **Loan — 2nd Half (Due)**, or **Loan — Due Date**.
 
 ### Active, completed, and deleted loans
 

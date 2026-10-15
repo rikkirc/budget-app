@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { displayBillName } from "./billNames";
 import { invoke } from "./api";
 
 export default function CashFlow() {
@@ -246,7 +247,7 @@ export default function CashFlow() {
                                           ) : (
                                               <span style={{ fontWeight: "bold", color: "#374151" }}>{t.account_name}</span>
                                           )}
-                                          <span style={{ color: "#6b7280", marginLeft: "10px" }}>{t.description}</span>
+                                          <span style={{ color: "#6b7280", marginLeft: "10px" }}>{displayBillName(t.description)}</span>
                                           {t.is_reversed && <span style={{ color: "#f59e0b", marginLeft: "10px", fontSize: "12px", fontStyle: "italic" }}>(Undone)</span>}
                                       </div>
                                       <div style={{ fontSize: "12px", color: "#9ca3af", marginTop: "3px" }}>
