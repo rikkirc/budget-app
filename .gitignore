@@ -28,3 +28,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Built by scripts/build-wasm.mjs
+src/sync/vault-web-pkg/
+dist-web

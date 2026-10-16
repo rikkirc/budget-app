@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { IS_MOBILE, SYNC_AVAILABLE, signIn, signUp, sendPasswordReset, changePassword, signOut, uploadLocalVault } from "./api";
+import { SYNC_ONLY, SYNC_AVAILABLE, signIn, signUp, sendPasswordReset, changePassword, signOut, uploadLocalVault } from "./api";
 
 // Your family account: sign in (or create an account with the family invite code) so this device syncs with your
 // other devices. On the desktop you can also sign out and go back to "This computer only".
@@ -15,7 +15,7 @@ export default function SyncSettings({ account, profileName, beforeSignOut, onDo
 
   // A desktop that was already in use brings its data along, so the phone starts from the same numbers
   const offerUpload = async () => {
-    if (IS_MOBILE || !profileName) return;
+    if (SYNC_ONLY || !profileName) return;
     if (!window.confirm(`Upload this computer's "${profileName}" vault to your account so your phone can use it?\n\nPress Cancel if you'd rather use what is already in your account.`)) return;
     try {
       const { upload } = await uploadLocalVault(profileName);
@@ -57,8 +57,8 @@ export default function SyncSettings({ account, profileName, beforeSignOut, onDo
   });
 
   const doSignOut = () => {
-    const warning = IS_MOBILE
-      ? `Sign out of ${account.email} on this phone? Your data stays safe in your account.`
+    const warning = SYNC_ONLY
+      ? `Sign out of ${account.email} on this device? Your data stays safe in your account.`
       : `Sign out of ${account.email} on this computer?\n\nThe app will go back to this computer's own vault file, which does NOT include changes made on your phone (or here) while you were signed in.`;
     if (!window.confirm(warning)) return;
     run(async () => {
@@ -126,7 +126,7 @@ export default function SyncSettings({ account, profileName, beforeSignOut, onDo
           : mode === "reset" ? "Enter your account's email and we'll send you a link to choose a new password."
           : "Sign in to sync your vaults between your phone and computer."}
       </p>
-      {!IS_MOBILE && !profileName && mode !== "reset" && <p style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a", padding: "10px", borderRadius: "5px", color: "#92400e", fontSize: "14px", lineHeight: 1.5 }}>💡 Already using Vault on this computer? Unlock your vault first, then sign in from the top bar, so your data is uploaded for your phone.</p>}
+      {!SYNC_ONLY && !profileName && mode !== "reset" && <p style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a", padding: "10px", borderRadius: "5px", color: "#92400e", fontSize: "14px", lineHeight: 1.5 }}>💡 Already using Vault on this computer? Unlock your vault first, then sign in from the top bar, so your data is uploaded for your phone.</p>}
 
       <label style={labelStyle}>Email</label>
       <input type="email" autoCapitalize="off" autoCorrect="off" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} />

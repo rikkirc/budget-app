@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { displayBillName } from "./billNames";
-import { invoke, IS_MOBILE, SYNC_AVAILABLE, isSignedIn, onAccountChange, subscribeToChanges } from "./api";
+import { invoke, SYNC_ONLY, SYNC_AVAILABLE, isSignedIn, onAccountChange, subscribeToChanges } from "./api";
 import Dashboard from "./Dashboard";
 import Budget from "./Budget";
 import Debt from "./Debt";
@@ -57,8 +57,8 @@ export default function App() {
   const handleSyncChanged = async ({ signedOut = false } = {}) => {
     setShowSync(false);
     if (!isLoggedIn) return;
-    // The phone has no vault of its own, so signing out locks the vault
-    if (signedOut && IS_MOBILE) { setIsLoggedIn(false); setProfileName(""); return; }
+    // The phone and web apps have no vault of their own, so signing out locks the vault
+    if (signedOut && SYNC_ONLY) { setIsLoggedIn(false); setProfileName(""); return; }
     // Reopen the same profile on whichever side now holds the data
     try { await invoke("login_user", { profile: profileName }); } catch (e) { alert(e); }
     unlockedSynced.current = isSignedIn();
@@ -124,11 +124,11 @@ export default function App() {
     return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", backgroundColor: "#f3f4f6", color: "#6b7280" }}>Opening Vault…</div>;
   }
 
-  // The phone always works through a family account, so it must be signed in before the first unlock
-  if (!isLoggedIn && (showSync || (IS_MOBILE && !sync))) {
+  // The phone and web apps always work through a family account, so they must be signed in before the first unlock
+  if (!isLoggedIn && (showSync || (SYNC_ONLY && !sync))) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", backgroundColor: "#f3f4f6", padding: "20px", boxSizing: "border-box" }}>
-        <SyncSettings account={account} profileName="" beforeSignOut={() => { signingOut.current = true; }} onDone={handleSyncChanged} onCancel={sync || !IS_MOBILE ? () => setShowSync(false) : null} />
+        <SyncSettings account={account} profileName="" beforeSignOut={() => { signingOut.current = true; }} onDone={handleSyncChanged} onCancel={sync || !SYNC_ONLY ? () => setShowSync(false) : null} />
       </div>
     );
   }
@@ -156,7 +156,7 @@ export default function App() {
           </button>
           {SYNC_AVAILABLE && (
             <p style={{ color: "#6b7280", fontSize: "14px", marginTop: "25px", marginBottom: 0 }}>
-              {sync ? `☁️ Signed in as ${sync.email}` : IS_MOBILE ? "" : "💻 This computer only"}
+              {sync ? `☁️ Signed in as ${sync.email}` : SYNC_ONLY ? "" : "💻 This computer only"}
               {" · "}
               <button onClick={() => setShowSync(true)} style={{ background: "none", border: "none", color: "#2563eb", cursor: "pointer", fontSize: "14px", padding: 0, textDecoration: "underline" }}>{sync ? "Account" : "Sign in to sync"}</button>
             </p>

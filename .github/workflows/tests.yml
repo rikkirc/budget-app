@@ -8,10 +8,12 @@ on:
     paths:
       - "src/**"
       - "vault-core/**"
+      - "vault-web/**"
       - "src-tauri/**"
       - "scripts/**"
       - "firestore.rules"
       - "firebase.json"
+      - "vite.config.js"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/tests.yml"
@@ -19,10 +21,12 @@ on:
     paths:
       - "src/**"
       - "vault-core/**"
+      - "vault-web/**"
       - "src-tauri/**"
       - "scripts/**"
       - "firestore.rules"
       - "firebase.json"
+      - "vite.config.js"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/tests.yml"
@@ -35,11 +39,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
             vault-core
             src-tauri
+            vault-web
+      # Turns the WebAssembly build into the JavaScript the web app loads, and runs Rust tests inside WebAssembly.
+      # Must match the wasm-bindgen version pinned in vault-web/Cargo.toml.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@0.2.129
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -51,12 +63,21 @@ jobs:
           java-version: "21"
 
       - run: cargo test --manifest-path vault-core/Cargo.toml
+      # The same tests again, inside WebAssembly as the web app runs them
+      - name: vault-core tests in WebAssembly
+        run: cargo test --manifest-path vault-core/Cargo.toml --target wasm32-unknown-unknown
+        env:
+          CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER: wasm-bindgen-test-runner
       # The app's own Rust tests call its commands through Tauri's IPC exactly as the screens do. They run here on
       # Linux: on Windows, Tauri test programs can't start (they lack the app's Windows manifest).
       - name: Install the libraries Tauri needs on Linux
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev
       - run: npm ci
       - run: npm run build
+      - run: npm run build:web
       - run: cargo test --manifest-path src-tauri/Cargo.toml
+      # REQUIRE_WASM: the browser-versus-desktop tests must run here, never be skipped
       - run: npm test
+        env:
+          REQUIRE_WASM: "1"
       - run: npm run test:firebase

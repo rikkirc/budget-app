@@ -801,6 +801,35 @@ pub fn restore_replica(path: &Path, bytes: &[u8], seq: i64) -> Result<Connection
     Ok(conn)
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// Vaults kept in memory. A browser has no files to keep a vault in, so it holds the vault in memory and saves these
+// bytes in the browser's own storage instead. The bytes are an ordinary vault file, so checkpoints move freely between
+// the browser and the desktop or Android app.
+// ---------------------------------------------------------------------------------------------------------------------
+
+/// A complete copy of a vault, as the bytes of a vault file
+pub fn vault_bytes(conn: &Connection) -> Result<Vec<u8>, String> {
+    conn.serialize(rusqlite::MAIN_DB).map(|data| data.to_vec()).map_err(|e| format!("ERROR: Could not copy the vault: {}", e))
+}
+
+/// Opens a vault from the bytes of a vault file into memory, checking it first and bringing its tables up to date
+pub fn open_vault_bytes(bytes: &[u8]) -> Result<Connection, String> {
+    if !bytes.starts_with(b"SQLite format 3\0") { return Err("ERROR: That checkpoint is not a Vault database".into()); }
+    let mut conn = Connection::open_in_memory().map_err(|e| format!("ERROR: {}", e))?;
+    conn.deserialize_read_exact(rusqlite::MAIN_DB, bytes, bytes.len(), false).map_err(|_| "ERROR: That checkpoint is damaged".to_string())?;
+    let check = conn.query_row("PRAGMA integrity_check", [], |r| r.get::<_, String>(0));
+    if !matches!(check.as_deref(), Ok("ok")) { return Err("ERROR: That checkpoint is damaged".into()); }
+    init_schema(&conn);
+    Ok(conn)
+}
+
+/// The in-memory counterpart of restore_replica: a replica holding the checkpoint taken at change `seq`
+pub fn restore_replica_bytes(bytes: &[u8], seq: i64) -> Result<Connection, String> {
+    let conn = open_vault_bytes(bytes)?;
+    set_applied_seq(&conn, seq)?;
+    Ok(conn)
+}
+
 pub fn dispatch(conn: &Connection, cmd: &str, args: &Value) -> Result<Value, String> {
     match cmd {
         "add_account" => { let name: String = arg(args, "name")?; to_json(add_account(conn, &name)) }
@@ -847,6 +876,9 @@ pub fn dispatch(conn: &Connection, cmd: &str, args: &Value) -> Result<Value, Str
 #[cfg(test)]
 mod tests {
     use super::*;
+    // In a browser build the same tests run under wasm-bindgen-test (see vault-web/README.md)
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
 
     fn test_db() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
@@ -1472,6 +1504,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_arch = "wasm32"))] // a browser has no files; vault_bytes is its snapshot
     fn snapshot_is_a_complete_openable_vault() {
         let conn = test_db();
         add_account(&conn, "Wallet");
@@ -1479,6 +1512,45 @@ mod tests {
         let bytes = snapshot(&conn, &scratch).unwrap();
         assert!(bytes.starts_with(b"SQLite format 3\0"));
         assert!(!scratch.exists());
+    }
+
+    #[test]
+    fn a_vault_survives_the_trip_through_bytes() {
+        let conn = test_db();
+        let wallet = fund_account(&conn, "Wallet", 1234.56);
+        set_applied_seq(&conn, 7).unwrap();
+        let bytes = vault_bytes(&conn).unwrap();
+        assert!(bytes.starts_with(b"SQLite format 3\0"));
+
+        let copy = restore_replica_bytes(&bytes, 9).unwrap();
+        assert_eq!(balance_of(&copy, wallet), 1234.56);
+        assert_eq!(last_applied_seq(&copy).unwrap(), 9, "the checkpoint's change number wins");
+        // The copy is a normal, writable vault
+        log_income(&copy, wallet, 100.0, "More");
+        assert_eq!(balance_of(&copy, wallet), 1334.56);
+        assert_eq!(balance_of(&conn, wallet), 1234.56, "the original is untouched");
+
+        assert!(open_vault_bytes(b"not a vault").is_err());
+        let mut damaged = bytes.clone();
+        damaged.truncate(bytes.len() / 2);
+        assert!(open_vault_bytes(&damaged).is_err(), "a cut-off download is refused");
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn checkpoints_move_between_file_and_memory_vaults() {
+        // A desktop checkpoint (a file copy) opens in memory, and an in-memory copy restores into a file replica
+        let conn = test_db();
+        let wallet = fund_account(&conn, "Wallet", 500.0);
+        let scratch = std::env::temp_dir().join(format!("vault_bytes_test_{}.db", std::process::id()));
+        let from_file = snapshot(&conn, &scratch).unwrap();
+        assert_eq!(balance_of(&open_vault_bytes(&from_file).unwrap(), wallet), 500.0);
+
+        let replica = std::env::temp_dir().join(format!("vault_bytes_replica_{}.db", std::process::id()));
+        let restored = restore_replica(&replica, &vault_bytes(&conn).unwrap(), 3).unwrap();
+        assert_eq!(balance_of(&restored, wallet), 500.0);
+        drop(restored);
+        let _ = std::fs::remove_file(&replica);
     }
 
     // ---- Sync replicas ----
