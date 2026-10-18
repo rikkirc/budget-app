@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { VitePWA } from "vite-plugin-pwa";
 import { fileURLToPath } from "node:url";
 
 // Set by `tauri android dev` / `tauri ios dev` so a real phone on your Wi-Fi can load the dev server
@@ -8,7 +9,39 @@ const host = process.env.TAURI_DEV_HOST;
 // `--mode web` builds the web app (PWA): the same screens, with vault-core running in the browser as WebAssembly
 // instead of in the Rust backend of the desktop and Android apps
 export default defineConfig(({ mode }) => ({
-  plugins: [react()],
+  plugins: [
+    react(),
+    // Makes the web app installable (home-screen icon, full screen) and lets it open offline. Only in the web build:
+    // the desktop and Android apps never get a service worker.
+    VitePWA({
+      disable: mode !== "web",
+      registerType: "prompt", // a new version waits until the user taps Reload (src/UpdateBanner.jsx)
+      injectRegister: false,
+      manifest: {
+        name: "Vault — Financial Command Center",
+        short_name: "Vault",
+        description: "Plan every bill against the paycheck that pays it, synced across your family's devices.",
+        start_url: "/",
+        scope: "/",
+        display: "standalone",
+        background_color: "#f3f4f6",
+        theme_color: "#1e3a8a",
+        icons: [
+          { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+          { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+          { src: "/icons/maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+        ],
+      },
+      workbox: {
+        // Everything the app needs to open with no connection, including vault-core's WebAssembly (about 1.4 MB)
+        globPatterns: ["**/*.{js,css,html,wasm,svg,png}"],
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        navigateFallback: "/index.html",
+        navigateFallbackDenylist: [/^\/__\//],
+        cleanupOutdatedCaches: true,
+      },
+    }),
+  ],
   resolve: {
     alias: {
       "@device-replica": fileURLToPath(new URL(mode === "web" ? "./src/sync/webReplica.js" : "./src/sync/tauriReplica.js", import.meta.url)),

@@ -1,6 +1,6 @@
 # Vault — Financial Command Center: User's Manual
 
-**Version 0.2.0** · Windows desktop and Android phone · Amounts in Philippine pesos (₱) · Paydays: 15th and end of month
+**Version 0.2.0** · Windows desktop, Android, and the web app for iPhone and Android · Amounts in Philippine pesos (₱) · Paydays: 15th and end of month
 
 Vault is a budgeting app for people paid twice a month. It plans every bill and loan installment against the paycheck that will cover it and tracks the money in each of your accounts. Use it on your Windows computer, on your Android phone, or both: sign in to a free family account and every change you make on one device appears on the other within seconds.
 
@@ -37,12 +37,13 @@ This manual covers both apps from installation to everyday use. A print-ready ve
 
 ## 1. Installing Vault
 
-You'll receive Vault as a **Google Drive link** from the person who shared it with you. There are two files; install the one for your device:
+The person who shared Vault with you sends you what you need for each device:
 
-| Device | File |
+| Device | What you get |
 |---|---|
-| **Windows computer** | `Vault_0.2.0_x64-setup.exe` |
-| **Android phone** | A file ending in `.apk` |
+| **Windows computer** | A Google Drive link to `Vault_0.2.0_x64-setup.exe` |
+| **iPhone or Android phone** | The web app link, **https://the-vault-1399a.web.app**. Nothing to download. |
+| **Android phone (optional)** | A Google Drive link to a file ending in `.apk`, the older way to install on Android |
 
 ### Install on a Windows computer
 
@@ -53,7 +54,28 @@ You'll receive Vault as a **Google Drive link** from the person who shared it wi
 5. If Windows shows **Windows protected your PC**, click **More info**, then **Run anyway**. This appears because the installer isn't signed with a paid certificate, which is normal for a family-built app.
 6. Click **Next → Install → Finish**, then open **Vault** from the Start Menu. The window is titled **Financial Command Center**.
 
-### Install on an Android phone
+### Install the web app on a phone (iPhone or Android)
+
+The web app is the full Vault, running in your phone's browser. It adds an icon to your home screen, opens full screen like any app, and updates itself.
+
+**On an iPhone:**
+
+1. Open **https://the-vault-1399a.web.app** in **Safari**.
+2. Tap the **Share** button (the square with an arrow pointing up) at the bottom of the screen.
+3. Scroll down and tap **Add to Home Screen**, then tap **Add**.
+4. Open **Vault** from your home screen. Always open it from this icon: an iPhone may clear the data of websites that are only visited in Safari.
+
+**On an Android phone:**
+
+1. Open **https://the-vault-1399a.web.app** in **Chrome**.
+2. Tap **⋮** (top right), then **Install app**. On some phones it says **Add to Home screen** instead.
+3. Tap **Install**, then open **Vault** from your home screen or app list.
+
+The web app always works through your family account, so the first screen asks you to sign in or create your account (section 3). After that it opens even with no signal, showing the numbers it last synced.
+
+### Install the Android app (.apk)
+
+The web app above is the easier choice; the `.apk` still works if you already use it.
 
 1. Open the Google Drive link on your phone and tap **Download** (⬇). Confirm if your phone asks.
 2. When the download finishes, tap the notification (or open the **Files** app → **Downloads**) and tap the `.apk` file.
@@ -63,10 +85,13 @@ You'll receive Vault as a **Google Drive link** from the person who shared it wi
 
 ### Updating
 
-When you're sent a new version, install it the same way. On Android, open the new `.apk` and tap **Update**; there's no need to uninstall first. Your data is kept on every device, and everything synced is also safe in your family account.
+- **Web app:** it updates itself. When a bar says **A new version of Vault is ready**, tap **Reload**. Tap **Later** to finish what you're doing first.
+- **Computer and Android app:** when you're sent a new version, install it the same way. On Android, open the new `.apk` and tap **Update**; there's no need to uninstall first.
+
+Your data is kept on every device, and everything synced is also safe in your family account.
 
 > [!TIP]
-> **Update every synced device.** If you sync, install the new version on your computer *and* your phone. An older version can't apply changes it doesn't know about (like renaming an account), so it would keep showing the old details.
+> **Update every synced device.** If you sync, install the new version on your computer *and* on any phone using the `.apk` (the web app updates itself). An older version can't apply changes it doesn't know about (like renaming an account), so it would keep showing the old details.
 
 ---
 
@@ -97,7 +122,7 @@ Signing in to a family account keeps your phone and computer on the same data. I
 You need two things from the person who shared Vault with you: the app (section 1) and the **family invite code**.
 
 > [!NOTE]
-> On the **computer**, signing in is optional. Without it, Vault works exactly as before and keeps everything on that one computer ("This computer only"). On the **phone**, you always sign in, because the phone keeps its data in step with your account.
+> On the **computer**, signing in is optional. Without it, Vault works exactly as before and keeps everything on that one computer ("This computer only"). On the **phone** (the web app or the Android app), you always sign in, because the phone keeps its data in step with your account.
 
 ### Create your account (once)
 
@@ -113,7 +138,7 @@ Do this on whichever device you set up first. **If you already have data on your
 
 **On the phone:**
 
-1. Open Vault. The **Sign in** screen appears.
+1. Open Vault (the web app or the Android app). The **Sign in** screen appears.
 2. Tap **Create an account**, enter your email, a password and the family invite code, then tap **Create account**.
 3. Unlock with your profile name.
 
@@ -176,7 +201,7 @@ The bar at the top of every screen holds the five sections of the app, your vaul
 
 ### On the phone
 
-Every screen and button works the same as on the computer. A few things are arranged differently to fit:
+Every screen and button works the same as on the computer, in the web app and the Android app alike. A few things are arranged differently to fit:
 
 - **Swipe the row of tabs** left and right to reach all five sections.
 - Your vault name, sync status, **Refresh** and **Log Out** sit in a compact row under the tabs.
@@ -530,6 +555,8 @@ For an extra copy, back up the computer's synced vaults folder now and then. Eac
 
 (Paste that into the File Explorer address bar to open it.)
 
+The web app keeps its copy in the phone browser's own storage. If that's ever cleared (for example when you clear Safari's or Chrome's website data), just sign in again: everything comes back from your account.
+
 ### Privacy
 
 - On the computer without signing in, Vault never sends your data anywhere.
@@ -602,6 +629,15 @@ Your computer profile name has other characters, like a period. Create a new vau
 **After signing out on the computer, my recent changes are gone**
 They aren't gone: they're in your account. The computer is now showing its old offline copy. Sign in again to see your synced data.
 
+**The web app doesn't show the latest version**
+Close it and open it again; when the **A new version of Vault is ready** bar appears, tap **Reload**. The web app checks for a new version each time it opens, and every hour while it stays open.
+
+**There's no "Add to Home Screen" or "Install app"**
+On an iPhone, open the link in **Safari** (not another app's built-in browser, like Messenger's). On Android, open it in **Chrome**.
+
+**The web app asks me to sign in again and downloads my vault again**
+The phone cleared its website data. Nothing is lost: once you sign in, everything comes back from your account. On an iPhone, open Vault from its home-screen icon rather than from Safari to avoid this.
+
 **The phone shows "ERROR: Expected the checkpoint's bytes"**
 This was a bug in an early phone app. Ask for the latest version and install it over the old one (section 1); your data is safe.
 
@@ -643,9 +679,10 @@ This is done **once**, by the person who runs Vault's sync for the family, befor
 4. **Add the security rules.** In Firestore's **Rules** tab, replace everything with the contents of the `firestore.rules` file from Vault's source code and click **Publish**.
 5. **Create the family invite code.** In Firestore's **Data** tab: **+ Start collection**, ID `invites`, **Next**. As the **Document ID**, type your code, long and hard to guess (e.g. `adobo-sinigang-mango-2026`). Add a field `note` = `family` and **Save**. To stop new sign-ups later, delete that document.
 6. **Connect the app.** **⚙️ Project settings → General → Your apps → Web (`</>`)**, register an app named `Vault`, and copy the `firebaseConfig` values into `src/firebaseConfig.js` in the app's source code, then rebuild the apps and share the new installers with everyone.
+7. **Publish the web app.** Turn on **Build → Hosting**, create a deploy key and add it to GitHub as described in [SYNC_AND_MOBILE.md](SYNC_AND_MOBILE.md) ("Publish the web app"). From then on, every update is published automatically and phones pick it up by themselves.
 
 The full technical guide, including free-plan limits and how sync works inside, is in [SYNC_AND_MOBILE.md](SYNC_AND_MOBILE.md).
 
 ---
 
-*Vault 0.2.0 · This manual describes the Windows desktop app and the Android app as of October 2026.*
+*Vault 0.2.0 · This manual describes the Windows desktop app, the Android app and the web app as of October 2026.*

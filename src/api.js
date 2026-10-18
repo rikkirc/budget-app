@@ -47,13 +47,19 @@ function services() {
 }
 
 let user = null;     // the signed-in family account, or null
+let joining = null;  // a sign-up still saving its family membership
 let engine = null;   // the synced vault that is open, if any
 const watchers = new Set();
 
 /** Calls back with { email } or null now and whenever the sign-in changes (also when a session ends elsewhere) */
 export function onAccountChange(callback) {
   if (!SYNC_AVAILABLE) { callback(null); return () => {}; }
-  return onAuthStateChanged(services().auth, (u) => {
+  return onAuthStateChanged(services().auth, async (u) => {
+    // A new account exists a moment before its membership is saved. Until then it can't open a vault, so don't
+    // report it yet; if the invite code was wrong, the account is removed and a signed-out change follows instead.
+    if (u && joining) {
+      try { await joining; } catch { return; }
+    }
     user = u;
     if (!u) { engine?.close(); engine = null; }
     callback(u ? { email: u.email } : null);
@@ -61,7 +67,10 @@ export function onAccountChange(callback) {
 }
 
 // Remember the account straight away, so an upload right after signing in never waits on Firebase's sign-in event
-export async function signUp(email, password, inviteCode) { user = await account.signUp(services(), email, password, inviteCode); }
+export async function signUp(email, password, inviteCode) {
+  joining = account.signUp(services(), email, password, inviteCode);
+  try { user = await joining; } finally { joining = null; }
+}
 export async function signIn(email, password) { user = await account.signIn(services(), email, password); }
 /** Whether commands currently go to a synced vault */
 export const isSignedIn = () => !!user;
