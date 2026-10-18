@@ -13,6 +13,10 @@ What's done, what's next, and what's blocked. Newest entries first.
 
 ## Log
 
+### 2026-10-19 — #28
+- README screenshots retaken from the web app's demo vault: Dashboard on a computer (1440×900) and a phone (390×844), the Bi-Monthly Budget's October 31 paycheck tab (a loan's 2nd Half and the TBD Internet bill), and the Loan Generator's 24-payment schedule. The old Windows and Android screenshots are gone.
+- The sync demo video is now labelled as recorded with the earlier desktop and Android apps.
+
 ### 2026-10-19 — #27
 - Manual: new "Try the demo first" section and a glossary entry; PDF rebuilt (27 pages), served by the app's download button.
 
@@ -90,8 +94,8 @@ What's done, what's next, and what's blocked. Newest entries first.
 - [x] Deleting a loan removed other loans' payments when one name started with the other. Now it removes only its own payments.
 
 ### Next up (web app)
-- [ ] Replace the README screenshots: they still show the retired Windows and Android apps. Take new ones from the demo (https://thevault-rc.web.app/?demo) on a phone and a computer.
-- [ ] Re-record the sync demo video with the web app, or label the current one as the earlier desktop/Android version.
+- [x] Replace the README screenshots: they still show the retired Windows and Android apps. Take new ones from the demo (https://thevault-rc.web.app/?demo) on a phone and a computer.
+- [x] Re-record the sync demo video with the web app, or label the current one as the earlier desktop/Android version. Labelled as the earlier version.
 
 ### Earlier (desktop and Android)
 - [x] Test the edit buttons on a real PC and phone.
