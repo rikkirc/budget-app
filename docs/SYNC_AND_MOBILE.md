@@ -22,7 +22,7 @@ server to rent, no credit card, and no bill, ever.
 - **Offline:** every device keeps its own full copy of your vault, so you can always see your balances and bills.
   Changes need a connection. Vault tells you if a change couldn't be sent, and never quietly retries it, so a
   payment can't be recorded twice.
-- **"This computer only"** still works exactly as before. Signing in is optional on the desktop.
+- **The retired desktop app** could also be used without signing in ("This computer only"). The web app always signs in.
 
 ### Is it really free?
 
@@ -85,8 +85,7 @@ Existing accounts keep working either way.
 
 These values are **not secret**. Every Firebase app contains them. What protects your data is `firestore.rules`.
 
-Committing the file starts a new Android build on GitHub automatically (see Part 2). For the desktop app, build
-it again (`npm run tauri build`) or run it with `npm run tauri dev`.
+Committing the file to `main` publishes a new web app automatically (step 6).
 
 ### 6. Publish the web app (once)
 
@@ -119,48 +118,40 @@ exists, the workflow still builds the web app and attaches it to the run, and sk
 
 ## Part 2: Install the app
 
-### Phones: the web app (iPhone and Android)
+### The web app (iPhone, Android and computers)
 
-Send everyone the link, `https://<your-project-id>.web.app`. On an iPhone they open it in **Safari** and choose
+Send everyone the link, `https://thevault-rc.web.app` (or `https://<your-project-id>.web.app`). On an iPhone they open it in **Safari** and choose
 **Share → Add to Home Screen**; on Android, they open it in **Chrome** and choose **⋮ → Install app**. The web app
 updates itself whenever a new version is published, so there's nothing to resend. Step-by-step instructions for
 family members are in the User's Manual, section 1.
 
 It runs the same vault-core as the other apps (compiled to WebAssembly), keeps its copy of the vault in the
-browser's storage, and opens offline. Like the Android app, it always works through a family account.
+browser's storage, and opens offline. It always works through an account. On a computer, people install it from
+**Edge** or **Chrome** (the ⊕ **Install** icon in the address bar).
 
-### Android phone (.apk)
+### The retired Windows and Android apps
 
-The web app above is simpler; the `.apk` remains available.
-
-1. On GitHub, open the repository's **Actions** tab, then the **Android app** workflow, then the latest
-   successful run **after** you committed `firebaseConfig.js`.
-2. Download **vault-android-apk** from *Artifacts* and unzip it to get the `.apk` file.
-3. Send it to each family member's phone and open it. Allow *Install unknown apps* when Android asks.
-
-### iOS
-
-iPhones use the web app above. A native iOS app is also possible (the Tauri project is set up for it), but it needs
-a Mac with Xcode and an Apple Developer account (US$99/year): `npm run tauri ios init`, then
-`npm run tauri ios build`.
+The Windows installer (`.exe`) and Android app (`.apk`) are retired: they no longer build automatically, and the
+User's Manual tells people how to move to the web app ("Moving from the old Windows or Android app"). Anyone whose
+Windows app shows **💻 Local only** must sign in there once and upload their vault first (Part 3). If an old
+install ever needs a rebuild, run **Actions → Windows app** or **Android app → Run workflow** and download the file
+from the run's *Artifacts*.
 
 ## Part 3: Create your account (each family member)
 
-1. Open Vault.
-   - **On a phone,** the account screen appears first.
-   - **On a desktop that already has your data,** unlock your vault as usual first, then click **💻 Local only** in
-     the top bar.
+1. Open Vault. After the welcome screen, the account screen appears.
+   - **In the retired Windows app, with data on that computer,** unlock your vault as usual first, then click
+     **💻 Local only** in the top bar.
 2. Choose **Create an account**. Enter your email, a password (at least 8 characters) and the family invite code.
-3. **On a desktop that already has your data:** Vault offers to upload this computer's vault. Click **OK** so your
-   phone starts with all your accounts, bills and loans. It never overwrites data already in your account without
-   asking.
+3. **In the retired Windows app:** Vault offers to upload this computer's vault. Click **OK** so the web app starts
+   with all your accounts, bills and loans. It never overwrites data already in your account without asking.
 4. Unlock with your profile name, e.g. `Juan Dela Cruz`. Use the **same profile name** on every device.
 5. On your other devices, choose **I already have an account** and sign in with the same email and password.
 
 The top bar shows **🟢 Live sync** when changes are flowing, or **🟠 Reconnecting…** if the connection dropped
 (Vault reconnects by itself).
 
-### Signing out on the desktop
+### Signing out of the retired desktop app
 
 Signing out takes the desktop back to its own vault file, which **doesn't include** changes made while you were
 signed in. Unless you want that old copy, stay signed in.
@@ -169,8 +160,9 @@ signed in. Unless you want that old copy, stay signed in.
 
 ## Backups
 
-Every device holds a complete copy of each synced vault, so a phone or PC breaking loses nothing. For an extra
-copy, back up the desktop's synced vaults folder now and then:
+Every device holds a complete copy of each synced vault, so a phone or PC breaking loses nothing. The web app keeps
+its copy in the browser's storage; if that's cleared, signing in downloads everything again. The retired desktop
+app kept its synced copies here:
 
 - **Windows:** `%APPDATA%\com.rikki.budget-app\synced\`
 - **macOS:** `~/Library/Application Support/com.rikki.budget-app/synced/`

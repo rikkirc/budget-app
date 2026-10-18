@@ -1,6 +1,8 @@
 # The Vault
 
-A budgeting app for desktop, Android and the web (an installable PWA for iPhone and Android), built with [Tauri](https://tauri.app/), React, Vite and Rust. Each profile gets its own SQLite "vault". By default it stays on your machine; turn on **sync** to use the same vault from your phone, updated in real time.
+A budgeting app for ordinary paycheck to paycheck people: an installable web app (PWA) for iPhone, Android and computers, built with React, Vite and Rust compiled to WebAssembly. Each profile gets its own SQLite "vault", synced in real time between your devices through Firebase.
+
+🌐 **Live at [thevault-rc.web.app](https://thevault-rc.web.app)**. The earlier Windows (`.exe`) and Android (`.apk`) apps, built with [Tauri](https://tauri.app/), are retired: their code is still here, but they're no longer built or updated.
 
 ▶️ **[Watch the sync demo](https://drive.google.com/file/d/1LszPGQpBaUTLtbLXiTfI56x02FueR9nd/view)**: a bill paid on the phone shows up on the desktop within a second.
 
@@ -31,8 +33,8 @@ The same demo vault on the desktop and on an Android phone, kept in step by live
 - **Loan Generator**: model debt and loan payoff, with Sinking Fund or True Bi-Monthly schedules
 - **Search**: find any bill, loan, or amount
 - **Smart bills**: reminders at login for recurring bills due within 10 days that still need an amount
-- **Web app for iPhone and Android**: the same app, installable from the browser, working offline and updating itself. The Rust business logic runs in the browser as WebAssembly, so every device computes identical balances
-- **Phone app + real-time sync** (optional): family members create their own accounts on a free Firebase project (no server, no card), and every change on one device shows up on their others within a second. See [Family accounts and sync](docs/SYNC_AND_MOBILE.md)
+- **Web app for any device**: installable from the browser, working offline and updating itself. The Rust business logic runs in the browser as WebAssembly, so every device computes identical balances
+- **Real-time sync**: people create their own accounts (with an invite code) on a free Firebase project (no server, no card), and every change on one device shows up on their others within a second. See [Accounts and sync](docs/SYNC_AND_MOBILE.md)
 
 ## User's Manual
 
@@ -40,25 +42,17 @@ New to the app? Read the [User's Manual](docs/USER_MANUAL.md), or the print-read
 
 ## Getting started
 
-Prerequisites: [Node.js](https://nodejs.org/) and the [Tauri prerequisites](https://tauri.app/start/prerequisites/) (Rust and the WebView2 runtime on Windows).
+Prerequisites: [Node.js](https://nodejs.org/), Rust, and the WebAssembly tools in [vault-web/README.md](vault-web/README.md).
 
 ```bash
 npm install
-npm run tauri dev
-```
-
-To build an installer:
-
-```bash
-npm run tauri build
-```
-
-The web app (needs the WebAssembly tools in [vault-web/README.md](vault-web/README.md)):
-
-```bash
 npm run dev:web     # local dev server
 npm run build:web   # build into dist-web/, published to Firebase Hosting by .github/workflows/web.yml
 ```
+
+Every merge to `main` that changes the app (or the manual PDF) publishes it automatically.
+
+The retired desktop and Android apps can still be run with `npm run tauri dev` (needs the [Tauri prerequisites](https://tauri.app/start/prerequisites/)), or built by hand from **Actions → Windows app / Android app → Run workflow**.
 
 ## Running tests
 
@@ -75,15 +69,15 @@ npm run test:firebase         # sync and security rules on the Firebase emulator
 
 ## Project layout
 
-- `src/`: the React frontend, shared by the desktop and phone apps. `src/api.js` sends each command to the local vault, or through the sync engine in `src/sync/` when signed in.
+- `src/`: the React frontend. `src/api.js` sends each command through the sync engine in `src/sync/` (or, in the retired desktop app, to the local vault).
 - `vault-core/`: all the business logic (accounts, bills, loans…), and the rules for applying synced changes.
-- `src-tauri/`: the desktop/mobile app shell.
+- `src-tauri/`: the retired desktop/Android app shell (no longer built automatically).
 - `vault-web/`: vault-core compiled to WebAssembly for the web app.
 - `src/firebaseConfig.js` and `firestore.rules`: the optional Firebase sync setup; see [docs/SYNC_AND_MOBILE.md](docs/SYNC_AND_MOBILE.md).
 
 ## Your data
 
-When you unlock a vault without sync, the app creates `<profile_name>_finance_data.db` in `Documents\FinancialCommandCenter\`. When you're signed in to an account, each device keeps its own copy of your vaults in the app's data folder (the web app: in the browser's storage), kept in step through Firebase (see [backups](docs/SYNC_AND_MOBILE.md#backups)). These files hold your personal financial data and live outside the repo, so back that folder up separately. `.gitignore` also excludes any stray `*.db` files so they are never committed.
+Your vaults are stored in your Firebase account, and each device keeps its own copy in the browser's storage, kept in step through Firebase (see [backups](docs/SYNC_AND_MOBILE.md#backups)). The retired desktop app kept unsynced vaults as `<profile_name>_finance_data.db` in `Documents\FinancialCommandCenter\`; those files hold personal financial data and live outside the repo. `.gitignore` also excludes any stray `*.db` files so they are never committed.
 
 ## Recommended IDE setup
 

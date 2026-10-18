@@ -2,11 +2,11 @@
 
 *by RCbreezy ©*
 
-**Version 0.3.0** · Windows desktop, Android, and the web app for iPhone and Android · Amounts in Philippine pesos (₱) · Paydays: 15th and end of month
+**Version 0.3.0** · The web app for iPhone, Android and computers · Amounts in Philippine pesos (₱) · Paydays: 15th and end of month
 
-**The Vault** ("Vault" for short) is a budgeting app for ordinary paycheck to paycheck people. It plans every bill and loan installment against the paycheck that will cover it and tracks the money in each of your accounts. Use it on your Windows computer, on your Android phone, or both: sign in to a free family account and every change you make on one device appears on the other within seconds.
+**The Vault** ("Vault" for short) is a budgeting app for ordinary paycheck to paycheck people. It plans every bill and loan installment against the paycheck that will cover it and tracks the money in each of your accounts. Use it on your phone, on your computer, or both: sign in to your free account and every change you make on one device appears on the other within seconds.
 
-This manual covers both apps from installation to everyday use. A print-ready version is in [Vault-User-Manual.pdf](Vault-User-Manual.pdf).
+This manual covers the app from installation to everyday use. A print-ready version is in [Vault-User-Manual.pdf](Vault-User-Manual.pdf), and you can also download it from the app's welcome screen.
 
 ## Contents
 
@@ -14,7 +14,7 @@ This manual covers both apps from installation to everyday use. A print-ready ve
 
 1. [Installing Vault](#1-installing-vault)
 2. [Unlocking your vault](#2-unlocking-your-vault)
-3. [Family accounts & sync](#3-family-accounts--sync)
+3. [Your account & sync](#3-your-account--sync)
 4. [Find your way around](#4-find-your-way-around)
 
 **Part 2 — Using Vault**
@@ -39,66 +39,58 @@ This manual covers both apps from installation to everyday use. A print-ready ve
 
 ## 1. Installing Vault
 
-The person who shared Vault with you sends you what you need for each device:
+The Vault is a web app: it runs in your browser at **https://thevault-rc.web.app**. There's nothing to download from a file link. You install it from the browser so it gets its own icon, opens full screen like any other app, and updates itself.
 
-| Device | What you get |
-|---|---|
-| **Windows computer** | A Google Drive link to `Vault_0.3.0_x64-setup.exe` |
-| **iPhone, Android phone, or any computer** | The web app link, **https://thevault-rc.web.app**. Nothing to download. |
-| **Android phone (optional)** | A Google Drive link to a file ending in `.apk`, the older way to install on Android |
+You also need the **invite code** from the person who shared Vault with you, to create your account ([section 3](#3-your-account--sync)).
 
-### Install on a Windows computer
-
-1. **Back up first if you already use Vault:** copy the folder `Documents\FinancialCommandCenter` to your Desktop or a USB drive.
-2. **If an older Vault is installed,** remove it: **Start → Settings → Apps → Installed apps → Vault → ⋯ → Uninstall**. Your data stays in `Documents\FinancialCommandCenter`; uninstalling never deletes it.
-3. Open the Google Drive link and click **Download** (⬇). If Drive or your browser warns that the file might be harmful or can't be scanned, choose **Download anyway** or **Keep**.
-4. Open your **Downloads** folder and double-click `Vault_0.3.0_x64-setup.exe`.
-5. If Windows shows **Windows protected your PC**, click **More info**, then **Run anyway**. This appears because the installer isn't signed with a paid certificate, which is normal for a family-built app.
-6. Click **Next → Install → Finish**, then open **Vault** from the Start Menu. The window is titled **The Vault**.
-
-### Install the web app on a phone (iPhone or Android)
-
-The web app is the full Vault, running in your phone's browser. It adds an icon to your home screen, opens full screen like any app, and updates itself.
-
-**On an iPhone:**
+### On an iPhone
 
 1. Open **https://thevault-rc.web.app** in **Safari**.
 2. Tap the **Share** button (the square with an arrow pointing up) at the bottom of the screen.
 3. Scroll down and tap **Add to Home Screen**, then tap **Add**.
 4. Open **Vault** from your home screen. Always open it from this icon: an iPhone may clear the data of websites that are only visited in Safari.
 
-**On an Android phone:**
+### On an Android phone
 
 1. Open **https://thevault-rc.web.app** in **Chrome**.
 2. Tap **⋮** (top right), then **Install app**. On some phones it says **Add to Home screen** instead.
 3. Tap **Install**, then open **Vault** from your home screen or app list.
 
-The web app always works through your family account, so the first screen asks you to sign in or create your account (section 3). After that it opens even with no signal, showing the numbers it last synced.
+### On a computer
 
-**On a computer (optional):** open **https://thevault-rc.web.app** in **Edge** or **Chrome** and click **Install The Vault** (the ⊕ icon at the right of the address bar). It then opens in its own window from the Start Menu, like the Windows app.
+1. Open **https://thevault-rc.web.app** in **Edge** or **Chrome**.
+2. Click **Install The Vault** (the ⊕ icon at the right of the address bar), then **Install**.
+3. From then on, open **The Vault** from the Start Menu (or the Dock on a Mac). It opens in its own window.
+
+The first screen asks you to sign in or create your account ([section 3](#3-your-account--sync)). After that, Vault opens even with no signal, showing the numbers it last synced.
 
 > [!NOTE]
 > Older copies may still use the original link, `https://the-vault-1399a.web.app`. It shows the same app and keeps working, so there's no need to reinstall.
 
-### Install the Android app (.apk)
-
-The web app above is the easier choice; the `.apk` still works if you already use it.
-
-1. Open the Google Drive link on your phone and tap **Download** (⬇). Confirm if your phone asks.
-2. When the download finishes, tap the notification (or open the **Files** app → **Downloads**) and tap the `.apk` file.
-3. If Android says your browser or Drive **isn't allowed to install unknown apps**, tap **Settings**, switch on **Allow from this source**, then go back and tap **Install**.
-4. If **Google Play Protect** warns about an unrecognized app, tap **More details → Install anyway**. This appears because Vault isn't from the Play Store.
-5. Open **Vault** from your apps.
-
 ### Updating
 
-- **Web app:** it updates itself. When a bar says **A new version of Vault is ready**, tap **Reload**. Tap **Later** to finish what you're doing first.
-- **Computer and Android app:** when you're sent a new version, install it the same way. On Android, open the new `.apk` and tap **Update**; there's no need to uninstall first.
+The web app updates itself. When a bar says **A new version of Vault is ready**, tap **Reload**. Tap **Later** to finish what you're doing first.
 
-Your data is kept on every device, and everything synced is also safe in your family account.
+### Moving from the old Windows or Android app
 
-> [!TIP]
-> **Update every synced device.** If you sync, install the new version on your computer *and* on any phone using the `.apk` (the web app updates itself). An older version can't apply changes it doesn't know about (like renaming an account), so it would keep showing the old details.
+Earlier versions of The Vault came as a Windows installer (`.exe`) and an Android app (`.apk`). These are retired: they get no more updates, and the web app replaces both. Move to the web app like this, **before** you uninstall anything.
+
+**From the Android app (`.apk`):** your data is already in your account, because the Android app always syncs.
+
+1. Install the web app (above).
+2. Sign in with the **same email and password**, and unlock with the **same profile name**. Your data appears.
+3. Uninstall the old app: press and hold its icon, then tap **Uninstall**.
+
+**From the Windows app (`.exe`):** first look at the button in the old app's top bar.
+
+- **🟢 Live sync:** your data is already in your account. Install the web app, sign in with the same email and password, and unlock with the same profile name.
+- **💻 Local only:** your data is **only on that computer** and must be uploaded first:
+  1. In the old app, unlock your vault as usual.
+  2. Click **💻 Local only**, then **Create an account** (or **I already have an account** if you have one). Sign in.
+  3. When it asks **"Upload this computer's … vault to your account so your phone can use it?"**, click **OK**. Repeat for each profile you use: log out, unlock the next one, and it asks again.
+  4. Now install the web app, sign in with the same email and password, and unlock with the same profile name.
+
+Once your data shows in the web app, uninstall the old app: **Start → Settings → Apps → Installed apps → Vault → ⋯ → Uninstall**. Uninstalling never deletes the `Documents\FinancialCommandCenter` folder; keep it as an extra backup.
 
 ---
 
@@ -114,16 +106,16 @@ Two different things have names in The Vault:
 
 | | What it is | How many |
 |---|---|---|
-| **Account** | You, signing in with your **email and password** ([section 3](#3-family-accounts--sync)). It keeps your data private and in step across your devices. | One per person |
+| **Account** | You, signing in with your **email and password** ([section 3](#3-your-account--sync)). It keeps your data private and in step across your devices. | One per person |
 | **Profile** | A **separate budget** inside your account, with its own money accounts, bills and loans. You open one by typing its **profile name**. | As many as you like |
 
-**One account can hold many profiles.** For example, Juan signs in once as `juan@example.com` and keeps three profiles: `Personal`, `Household` and `Sari-sari Store`. Each profile's numbers are completely separate, and every one of them syncs to all of Juan's devices. Nobody else in the family can open Juan's profiles, even if they type the same name: profiles always belong to the account that's signed in.
+**One account can hold many profiles.** For example, Juan signs in once as `juan@example.com` and keeps three profiles: `Personal`, `Household` and `Sari-sari Store`. Each profile's numbers are completely separate, and every one of them syncs to all of Juan's devices. Nobody else can open Juan's profiles, even if they type the same name: profiles always belong to the account that's signed in.
 
 Most people need just one profile, for example `Juan Dela Cruz`.
 
 ### Open a profile
 
-**On the computer**, the first screen asks for your profile name. **On the phone**, you first sign in to your family account ([section 3](#3-family-accounts--sync)), then see the same screen.
+After you sign in ([section 3](#3-your-account--sync)), Vault asks for your profile name.
 
 1. Type your profile name.
 2. Leave **Open this profile automatically next time** ticked if this is your own device.
@@ -133,50 +125,33 @@ Most people need just one profile, for example `Juan Dela Cruz`.
 > [!CAUTION]
 > **Use exactly the same profile name on every device.** Capitals don't matter and spaces become underscores, so `Juan Dela Cruz` and `juan dela cruz` open the same vault. But a typo like `Juan Dela Curz` quietly creates a brand-new empty vault. If your data seems to be missing, log out and check the name.
 
-**Opening automatically.** With **Open this profile automatically next time** ticked (and, on the phone, **Keep me signed in**), The Vault skips the welcome, sign-in and unlock screens from then on and opens straight to your profile. Pressing **🔒 Log Out** turns this off, so the next person on that device sees the unlock screen; tick the box again when you unlock to turn it back on.
+**Opening automatically.** With **Open this profile automatically next time** ticked (and **Keep me signed in**), The Vault skips the welcome, sign-in and unlock screens from then on and opens straight to your profile. Pressing **🔒 Log Out** turns this off, so the next person on that device sees the unlock screen; tick the box again when you unlock to turn it back on.
 
 > [!CAUTION]
-> **Not a password.** The profile name only picks which vault to open. Protect your computer with your Windows sign-in and your phone with its screen lock; synced vaults are also protected by your account password.
+> **Not a password.** The profile name only picks which vault to open. Your vaults are protected by your account password; also protect your phone with its screen lock and your computer with its sign-in.
 
-For syncing, profile names may only contain letters, numbers, spaces, `-` and `_`.
+Profile names may only contain letters, numbers, spaces, `-` and `_`.
 
 ---
 
-## 3. Family accounts & sync
+## 3. Your account & sync
 
-Signing in to a family account keeps your phone and computer on the same data. It's free, needs no server, and each family member's account is private: nobody else can see your vaults.
-
-You need two things from the person who shared Vault with you: the app (section 1) and the **family invite code**.
-
-> [!NOTE]
-> On the **computer**, signing in is optional. Without it, Vault works exactly as before and keeps everything on that one computer ("This computer only"). On the **phone** (the web app or the Android app), you always sign in, because the phone keeps its data in step with your account.
+Your account keeps your phone and computer on the same data. It's free, and each person's account is private: nobody else can see your vaults.
 
 ### Create your account (once)
 
-Do this on whichever device you set up first. **If you already have data on your computer, start there**, so it can be uploaded for your phone.
+You need the **invite code** from the person who shared Vault with you.
 
-**On the computer:**
-
-1. Unlock your vault as usual (section 2).
-2. In the top bar, click **💻 Local only**.
-3. Click **Create an account**. Enter your email, a password (at least 8 characters) and the family invite code, then click **Create account**.
-4. Vault asks **"Upload this computer's … vault to your account so your phone can use it?"** Click **OK**. All your accounts, bills and loans are copied into your account.
-5. The top bar now shows **🟢 Live sync**.
-
-**On the phone:**
-
-1. Open Vault (the web app or the Android app). The **Sign in** screen appears.
-2. Tap **Create an account**, enter your email, a password and the family invite code, then tap **Create account** (or press **Enter**). Leave **Keep me signed in on this device** ticked on your own phone; untick it on a shared or borrowed device, and you'll be signed out when the app closes.
-3. Unlock with your profile name.
+1. Open Vault. After the welcome screen, the **Sign in** screen appears.
+2. Tap **Create an account**. Enter your email, a password (at least 8 characters) and the invite code (in the **Family invite code** box), then tap **Create account** (or press **Enter**).
+3. Leave **Keep me signed in on this device** ticked on your own device; untick it on a shared or borrowed one, and you'll be signed out when the app closes.
+4. Unlock with your profile name ([section 2](#2-unlocking-your-vault)).
 
 ### Sign in on your other devices
 
-1. Open Vault and choose **I already have an account** (on the computer, first click **💻 Local only** in the top bar).
-2. Enter the same email and password and click **Sign in**.
+1. Open Vault and choose **I already have an account**.
+2. Enter the same email and password and tap **Sign in** (or press **Enter**).
 3. Unlock with the **same profile name**. Your data appears.
-
-> [!CAUTION]
-> **If Vault says your account already has data for this vault**, you've used that profile name on another device already. **OK** replaces the account's copy with this computer's copy on *every* device; anything entered only on the other device is lost. **Cancel** keeps the account's copy and shows it here instead. When in doubt, choose **Cancel**.
 
 ### Live sync
 
@@ -186,7 +161,6 @@ The button in the top bar shows how sync is doing:
 |---|---|
 | **🟢 Live sync** | Connected. Your changes reach your other devices within a second or two, and theirs reach you. |
 | **🟠 Reconnecting…** | The connection dropped. Vault reconnects by itself as soon as it can. |
-| **💻 Local only** | (Computer only) Not signed in. This computer keeps its own separate data. |
 
 When a change arrives from another device, the screen refreshes by itself. If you're halfway through typing, Vault shows **🔄 Your vault was updated on another device. Tap here to refresh** instead, so your half-filled form isn't wiped. Save what you're doing first, then tap it.
 
@@ -199,15 +173,12 @@ Every device keeps its own full copy of your vault, so with no signal you can st
 ### Passwords and lost phones
 
 - **Forgot your password?** On the sign-in screen, tap **Forgot password?**, enter your email, and tap **Email me a reset link**. Check your inbox (and spam folder).
-- **Change your password:** click **🟢 Live sync → Change password (lost a phone? this signs it out)**, enter your current and new password.
+- **Change your password:** tap **🟢 Live sync → Change password (lost a phone? this signs it out)**, and enter your current and new password.
 - **Lost a phone?** Change your password from another device. Every other device is signed out (within about an hour) and needs the new password. Your data stays safe in your account.
 
 ### Signing out
 
-Click **🟢 Live sync → Sign out**.
-
-- **On the phone,** the vault locks; sign in again any time.
-- **On the computer,** Vault goes back to "This computer only" and shows the computer's own old data, which **doesn't include** changes made while you were signed in. Unless you mean to stop syncing, stay signed in.
+Tap **🟢 Live sync → Sign out**. The vault locks; sign in again any time and your data is still there.
 
 ---
 
@@ -222,13 +193,13 @@ The top of every screen shows **The Vault by RCbreezy ©** with today's date and
 | **📅 Bi-Monthly Budget** | Every unpaid bill, grouped by the paycheck that pays it. See [section 8](#8-bi-monthly-budget). |
 | **📉 Loan Generator** | Add loans and generate their payment schedules. See [section 9](#9-loan-generator). |
 | **🔍 Search** | Find any bill, loan, or amount. See [section 10](#10-search). |
-| **🟢 Live sync / 💻 Local only** | Your account and sync status. See [section 3](#3-family-accounts--sync). |
+| **🟢 Live sync** | Your account and sync status. See [section 3](#3-your-account--sync). |
 | **🔄 Refresh** | Reloads the current screen with the latest numbers. |
 | **🔒 Log Out** | Locks the vault and returns to the profile screen. It also stops this profile from opening by itself next time. |
 
 ### On the phone
 
-Every screen and button works the same as on the computer, in the web app and the Android app alike. A few things are arranged differently to fit:
+Every screen and button works the same as on a computer. A few things are arranged differently to fit:
 
 - **Swipe the row of tabs** left and right to reach all five sections.
 - Your vault name, sync status, **Refresh** and **Log Out** sit in a compact row under the tabs.
@@ -532,11 +503,11 @@ Deleted items in the Recycle Bins aren't searched.
 - **Typo in a name, or the wrong amount or due date:** use **✏️ Edit** on the account, bill, or loan.
 - **Deleted something by accident:** restore it from the matching Recycle Bin.
 
-### Start using Vault on a new phone
+### Start using Vault on a new phone or computer
 
-1. Install the Android app ([section 1](#1-installing-vault)).
+1. Install the web app ([section 1](#1-installing-vault)).
 2. Open it, choose **I already have an account**, and sign in with your email and password.
-3. Unlock with the **same profile name** you use on your computer. Your accounts, bills and loans download onto the phone.
+3. Unlock with the **same profile name** you use on your other devices. Your accounts, bills and loans download onto the new device.
 
 ### Everyday use on two devices
 
@@ -548,47 +519,16 @@ Deleted items in the Recycle Bins aren't searched.
 
 ## 12. Your data & backups
 
-Where your data lives depends on whether you're signed in.
+Your vaults are stored in your account (on Google's Firebase service), and each device you sign in on keeps a full copy in its browser's own storage, kept in step through your account.
 
-| | Not signed in (computer only) | Signed in to a family account |
-|---|---|---|
-| **Where** | One file per vault on this computer | A full copy on each of your devices, kept in step through your account |
-| **Shared with your phone?** | No | Yes, in real time |
-| **Survives losing a device?** | Only if you have a backup | Yes: sign in on a new device and it downloads everything |
-
-### Computer-only vaults
-
-Each vault is one file:
-
-```
-Documents\FinancialCommandCenter\<profile_name>_finance_data.db
-```
-
-For example, the profile `Juan Dela Cruz` is saved as `juan_dela_cruz_finance_data.db`.
-
-**Back up:** close Vault, then copy the whole `Documents\FinancialCommandCenter` folder to a USB drive or cloud storage. Do this before installing a new version.
-
-**Restore or move to a new computer:** install Vault, copy your backed-up `.db` file into `Documents\FinancialCommandCenter` (create the folder if needed), and unlock with the same profile name.
-
-### Synced vaults
-
-Your synced vaults are stored in your family account (on Google's Firebase service) and copied onto each device you sign in on. If a phone breaks or is lost, nothing is lost: sign in on the new one.
-
-For an extra copy, back up the computer's synced vaults folder now and then. Each file in it is a normal Vault database:
-
-```
-%APPDATA%\com.rikki.budget-app\synced\
-```
-
-(Paste that into the File Explorer address bar to open it.)
-
-The web app keeps its copy in the phone browser's own storage. If that's ever cleared (for example when you clear Safari's or Chrome's website data), just sign in again: everything comes back from your account.
+- **Lost or broken phone?** Nothing is lost: install the web app on the new one and sign in.
+- **Browser data cleared?** If a device's website data is ever cleared (for example when you clear Safari's or Chrome's website data), just sign in again: everything comes back from your account.
+- **Old Windows app data:** if you used the retired Windows app, its files are still in `Documents\FinancialCommandCenter` (one `.db` file per profile). They're only a backup now; move their data into your account as described in [Moving from the old Windows or Android app](#moving-from-the-old-windows-or-android-app).
 
 ### Privacy
 
-- On the computer without signing in, Vault never sends your data anywhere.
-- When signed in, your data travels encrypted to your family's Firebase project. Each person can only ever see their own vaults, and nothing is shared, sold or used for anything else.
-- The stored data is **not end-to-end encrypted**: the administrator of the family's Firebase project (RCbreezy) has technical access to it, as the owner of any app's database does, but does not look at it. This is stated in the **Terms & Privacy Notice** you agree to on the welcome screen.
+- Your data travels encrypted to the Firebase project that runs Vault. Each person can only ever see their own vaults, and nothing is shared, sold or used for anything else.
+- The stored data is **not end-to-end encrypted**: the administrator of that Firebase project (RCbreezy) has technical access to it, as the owner of any app's database does, but does not look at it. This is stated in the **Terms & Privacy Notice** you agree to on the welcome screen.
 - Don't store passwords, PINs, card numbers or full account numbers in The Vault.
 - Passwords are handled entirely by Firebase; Vault never stores them.
 - You can ask RCbreezy to delete your account and data at any time.
@@ -600,7 +540,7 @@ The web app keeps its copy in the phone browser's own storage. If that's ever cl
 ### Using Vault
 
 **My vault is empty after logging in**
-You most likely typed a different profile name, which created a new empty vault. Click **Log Out** and unlock with the exact name you used before. Your data is still in its own file in `Documents\FinancialCommandCenter`.
+You most likely typed a different profile name, which created a new empty vault. Click **🔒 Log Out** and unlock with the exact name you used before. Also check you're signed in to the right account (tap **🟢 Live sync** to see its email).
 
 **A balance is off by ₱0.01**
 Versions before 0.2.0 could create or lose a centavo when moving Sinking Fund halves of odd-centavo installments (for example ₱412.35 ÷ 2 = ₱206.175). Version 0.2.0 fixes this for all new transactions.
@@ -629,17 +569,14 @@ Hidden maintenance buttons for data from older versions of the app. **Fix Stray 
 
 ### Phone, accounts & sync
 
-**The phone says "Sync isn't set up yet"**
-That copy of the app is out of date. Ask for the latest version and install it (section 1).
-
 **"That family invite code isn't right"**
 Check the code with the person who shared Vault with you; it must match exactly, including dashes.
 
 **"Wrong email or password"**
 Check for typos, or tap **Forgot password?** to get a reset email. After several wrong tries, Vault asks you to wait a few minutes.
 
-**My phone shows an empty vault**
-Either the profile name differs from the computer's (log out and check the spelling), or the computer's data was never uploaded. On the computer, make sure you're signed in to the same account; if you chose **Cancel** at the upload question earlier, sign out and sign in again on the computer to be asked again.
+**The web app shows an empty vault after moving from the old Windows app**
+Either the profile name is different (log out and check the spelling), or the computer's data was never uploaded. In the old Windows app, check the top bar: if it shows **💻 Local only**, follow [Moving from the old Windows or Android app](#moving-from-the-old-windows-or-android-app). If you chose **Cancel** at the upload question earlier, sign out and sign in again in the old app to be asked again.
 
 **"OFFLINE: Couldn't reach the sync service" when unlocking**
 You're seeing the last data this device saved. Everything is viewable; changes wait until you're back online.
@@ -648,16 +585,13 @@ You're seeing the last data this device saved. Everything is viewable; changes w
 Reconnect, press **🔄 Refresh**, and check whether the change is there before entering it again.
 
 **The top bar stays on 🟠 Reconnecting…**
-Check the device's internet connection. If it stays orange on a good connection for a long time, the family may have reached Firebase's free daily limit, which almost never happens; it resets at about **3 PM Philippine time**. Nothing is ever charged.
+Check the device's internet connection. If it stays orange on a good connection for a long time, Vault may have reached Firebase's free daily limit, which almost never happens; it resets at about **3 PM Philippine time**. Nothing is ever charged.
 
 **I was signed out by myself**
 Your password was changed on another device (or reset by email). Sign in with the new password.
 
 **"To sync, profile names may only use letters, numbers, spaces, - and _"**
-Your computer profile name has other characters, like a period. Create a new vault with a plain name, or ask the person who shared Vault with you to help move the data.
-
-**After signing out on the computer, my recent changes are gone**
-They aren't gone: they're in your account. The computer is now showing its old offline copy. Sign in again to see your synced data.
+Your old Windows app profile name has other characters, like a period, so it can't be uploaded. Create a new vault with a plain name, or ask the person who shared Vault with you to help move the data.
 
 **The web app doesn't show the latest version**
 Close it and open it again; when the **A new version of Vault is ready** bar appears, tap **Reload**. The web app checks for a new version each time it opens, and every hour while it stays open.
@@ -668,8 +602,8 @@ On an iPhone, open the link in **Safari** (not another app's built-in browser, l
 **The web app asks me to sign in again and downloads my vault again**
 The phone cleared its website data. Nothing is lost: once you sign in, everything comes back from your account. On an iPhone, open Vault from its home-screen icon rather than from Safari to avoid this.
 
-**The phone shows "ERROR: Expected the checkpoint's bytes"**
-This was a bug in an early phone app. Ask for the latest version and install it over the old one (section 1); your data is safe.
+**The old Android or Windows app shows an error or looks out of date**
+Those apps are retired and no longer updated. Switch to the web app ([section 1](#1-installing-vault)); your synced data is safe in your account.
 
 ---
 
@@ -690,30 +624,31 @@ This was a bug in an early phone app. Ask for the latest version and install it 
 | **Receipt** | The record of a paid or funded bill, which can be undone. |
 | **Total Loan Incurred** | Principal plus all interest. |
 | **Vault** | One profile's data file, or the app itself. |
-| **Family account** | Your email-and-password sign-in. It keeps your vaults in step across your devices, and can hold many profiles. |
+| **Account** | Your email-and-password sign-in. It keeps your vaults in step across your devices, and can hold many profiles. |
 | **Profile** | One separate budget inside your account, opened by typing its profile name. See [Accounts and profiles](#accounts-and-profiles). |
-| **Family invite code** | The code needed to create an account, given to you by the person who shared Vault with you. |
+| **Invite code** | The code needed to create an account (the **Family invite code** box), given to you by the person who shared Vault with you. |
 | **Live sync** | The connection that sends changes between your devices as they happen. |
-| **Local only** | Using Vault on a computer without signing in; its data stays on that computer. |
-| **Upload** | Copying a computer's existing vault into your account the first time you sign in. |
-| **Firebase** | Google's free service that stores and passes on your synced vaults. |
+| **Local only** | The retired Windows app, used without signing in; its data stays on that computer until uploaded. |
+| **Upload** | Copying the retired Windows app's vault into your account, the first time you sign in there. |
+| **Firebase** | Google's free service that stores your vaults, passes changes between your devices, and hosts the web app. |
+| **Web app** | The Vault itself: an app that runs in your browser and installs from it, at **https://thevault-rc.web.app**. |
 
 ---
 
 ## Appendix: Setting up Firebase
 
-This is done **once**, by the person who runs Vault's sync for the family, before anyone creates an account. Family members can skip it. It takes about 10 minutes and is free: Firebase's **Spark** plan needs no credit card and can't charge you. Never click **Upgrade** to the Blaze plan.
+This is done **once**, by the person who runs Vault, before anyone creates an account. Everyone else can skip it. It takes about 10 minutes and is free: Firebase's **Spark** plan needs no credit card and can't charge you. Never click **Upgrade** to the Blaze plan.
 
 1. **Create the project.** Go to **console.firebase.google.com**, click **Create a project**, name it (e.g. `vault-family`), and turn **Google Analytics off**.
 2. **Turn on email sign-in.** **Build → Authentication → Get started → Sign-in method → Email/Password**, switch on the first toggle, **Save**.
 3. **Create the database.** **Build → Firestore Database → Create database**. Location **asia-southeast1 (Singapore)** (it can't be changed later), **Start in production mode**, **Create**.
 4. **Add the security rules.** In Firestore's **Rules** tab, replace everything with the contents of the `firestore.rules` file from Vault's source code and click **Publish**.
-5. **Create the family invite code.** In Firestore's **Data** tab: **+ Start collection**, ID `invites`, **Next**. As the **Document ID**, type your code, long and hard to guess (e.g. `adobo-sinigang-mango-2026`). Add a field `note` = `family` and **Save**. To stop new sign-ups later, delete that document.
-6. **Connect the app.** **⚙️ Project settings → General → Your apps → Web (`</>`)**, register an app named `Vault`, and copy the `firebaseConfig` values into `src/firebaseConfig.js` in the app's source code, then rebuild the apps and share the new installers with everyone.
-7. **Publish the web app.** Turn on **Build → Hosting**, then click **Add another site** and name it `thevault-rc`, so the app is at the short link **https://thevault-rc.web.app** as well as the original one. Create a deploy key and add it to GitHub as described in [SYNC_AND_MOBILE.md](SYNC_AND_MOBILE.md) ("Publish the web app"). From then on, every update is published automatically and phones pick it up by themselves.
+5. **Create the invite code.** In Firestore's **Data** tab: **+ Start collection**, ID `invites`, **Next**. As the **Document ID**, type your code, long and hard to guess (e.g. `adobo-sinigang-mango-2026`). Add a field `note` = `family` and **Save**. To stop new sign-ups later, delete that document.
+6. **Connect the app.** **⚙️ Project settings → General → Your apps → Web (`</>`)**, register an app named `Vault`, and copy the `firebaseConfig` values into `src/firebaseConfig.js` in the app's source code, then publish the web app (next step).
+7. **Publish the web app.** Turn on **Build → Hosting**, then click **Add another site** and name it `thevault-rc`, so the app is at the short link **https://thevault-rc.web.app** as well as the original one. Create a deploy key and add it to GitHub as described in [SYNC_AND_MOBILE.md](SYNC_AND_MOBILE.md) ("Publish the web app"). From then on, every update is published automatically and every device picks it up by itself.
 
 The full technical guide, including free-plan limits and how sync works inside, is in [SYNC_AND_MOBILE.md](SYNC_AND_MOBILE.md).
 
 ---
 
-*The Vault 0.3.0 · This manual describes the Windows desktop app, the Android app and the web app as of October 2026.*
+*The Vault 0.3.0 · This manual describes the web app as of October 2026. The Windows and Android apps are retired.*
