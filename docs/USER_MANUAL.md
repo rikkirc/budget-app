@@ -2,7 +2,7 @@
 
 *by RCbreezy ©*
 
-**Version 0.2.0** · Windows desktop, Android, and the web app for iPhone and Android · Amounts in Philippine pesos (₱) · Paydays: 15th and end of month
+**Version 0.3.0** · Windows desktop, Android, and the web app for iPhone and Android · Amounts in Philippine pesos (₱) · Paydays: 15th and end of month
 
 **The Vault** ("Vault" for short) is a budgeting app for people paid twice a month. It plans every bill and loan installment against the paycheck that will cover it and tracks the money in each of your accounts. Use it on your Windows computer, on your Android phone, or both: sign in to a free family account and every change you make on one device appears on the other within seconds.
 
@@ -43,7 +43,7 @@ The person who shared Vault with you sends you what you need for each device:
 
 | Device | What you get |
 |---|---|
-| **Windows computer** | A Google Drive link to `Vault_0.2.0_x64-setup.exe` |
+| **Windows computer** | A Google Drive link to `Vault_0.3.0_x64-setup.exe` |
 | **iPhone, Android phone, or any computer** | The web app link, **https://thevault-rc.web.app**. Nothing to download. |
 | **Android phone (optional)** | A Google Drive link to a file ending in `.apk`, the older way to install on Android |
 
@@ -52,9 +52,9 @@ The person who shared Vault with you sends you what you need for each device:
 1. **Back up first if you already use Vault:** copy the folder `Documents\FinancialCommandCenter` to your Desktop or a USB drive.
 2. **If an older Vault is installed,** remove it: **Start → Settings → Apps → Installed apps → Vault → ⋯ → Uninstall**. Your data stays in `Documents\FinancialCommandCenter`; uninstalling never deletes it.
 3. Open the Google Drive link and click **Download** (⬇). If Drive or your browser warns that the file might be harmful or can't be scanned, choose **Download anyway** or **Keep**.
-4. Open your **Downloads** folder and double-click `Vault_0.2.0_x64-setup.exe`.
+4. Open your **Downloads** folder and double-click `Vault_0.3.0_x64-setup.exe`.
 5. If Windows shows **Windows protected your PC**, click **More info**, then **Run anyway**. This appears because the installer isn't signed with a paid certificate, which is normal for a family-built app.
-6. Click **Next → Install → Finish**, then open **Vault** from the Start Menu. The window is titled **Financial Command Center**.
+6. Click **Next → Install → Finish**, then open **Vault** from the Start Menu. The window is titled **The Vault**.
 
 ### Install the web app on a phone (iPhone or Android)
 
@@ -716,4 +716,4 @@ The full technical guide, including free-plan limits and how sync works inside, 
 
 ---
 
-*Vault 0.2.0 · This manual describes the Windows desktop app, the Android app and the web app as of October 2026.*
+*The Vault 0.3.0 · This manual describes the Windows desktop app, the Android app and the web app as of October 2026.*

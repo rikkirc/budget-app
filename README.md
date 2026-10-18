@@ -1,4 +1,4 @@
-# Financial Command Center
+# The Vault
 
 A budgeting app for desktop, Android and the web (an installable PWA for iPhone and Android), built with [Tauri](https://tauri.app/), React, Vite and Rust. Each profile gets its own SQLite "vault". By default it stays on your machine; turn on **sync** to use the same vault from your phone, updated in real time.
 
