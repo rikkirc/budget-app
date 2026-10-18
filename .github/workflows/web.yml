@@ -1,0 +1,69 @@
+# Builds the web app (PWA) and publishes it to Firebase Hosting at https://the-vault-1399a.web.app
+# whenever main changes. Every phone that has it installed picks up the new version by itself.
+# Publishing needs the FIREBASE_SERVICE_ACCOUNT secret (docs/SYNC_AND_MOBILE.md, "Publish the web app"). Without it
+# the app is still built and attached to the run, and the publish step is skipped with a note.
+name: Web app
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "public/**"
+      - "index.html"
+      - "vault-core/**"
+      - "vault-web/**"
+      - "scripts/build-wasm.mjs"
+      - "vite.config.js"
+      - "package.json"
+      - "package-lock.json"
+      - "firebase.json"
+      - ".github/workflows/web.yml"
+
+# Publish one version at a time, in order
+concurrency:
+  group: web-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HAS_DEPLOY_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: vault-web
+      # Must match the wasm-bindgen version pinned in vault-web/Cargo.toml
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@0.2.129
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build:web
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vault-web-app
+          path: dist-web
+
+      - name: Publish to Firebase Hosting
+        if: env.HAS_DEPLOY_KEY == 'true'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: the-vault-1399a
+          channelId: live
+      - name: Publishing skipped
+        if: env.HAS_DEPLOY_KEY != 'true'
+        run: echo "::notice::The web app was built but not published. Add the FIREBASE_SERVICE_ACCOUNT secret to publish it (see docs/SYNC_AND_MOBILE.md)."

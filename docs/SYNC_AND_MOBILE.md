@@ -88,21 +88,57 @@ These values are **not secret**. Every Firebase app contains them. What protects
 Committing the file starts a new Android build on GitHub automatically (see Part 2). For the desktop app, build
 it again (`npm run tauri build`) or run it with `npm run tauri dev`.
 
+### 6. Publish the web app (once)
+
+The web app is published to **Firebase Hosting**, which the free Spark plan includes (10 GB of storage and 360 MB
+of downloads a day; Vault is about 1 MB once compressed, and each phone downloads it once per update). GitHub
+publishes it automatically every time `main` changes, using a key you create once:
+
+1. **Turn on Hosting.** In the Firebase console, left menu **Build → Hosting → Get started**. Click **Next** through
+   the steps (you don't need to run the commands it shows) and **Continue to console**.
+2. **Create the deploy key.** Open https://console.cloud.google.com/iam-admin/serviceaccounts, sign in with the
+   same Google account and pick your Firebase project at the top. Click **+ Create service account**, name it
+   `github-deploy`, and click **Create and continue**. Add these three roles, then click **Done**:
+   **Firebase Hosting Admin**, **API Keys Viewer**, **Cloud Run Viewer**.
+3. Click the new `github-deploy` account, open the **Keys** tab, then **Add key → Create new key → JSON → Create**.
+   A `.json` file downloads. It can publish your website, so keep it private.
+4. **Give it to GitHub.** In the repository on GitHub: **Settings → Secrets and variables → Actions → New repository
+   secret**. Name: `FIREBASE_SERVICE_ACCOUNT`. Secret: open the `.json` file in a text editor and paste all of it.
+   Click **Add secret**, then delete the downloaded file.
+5. **Publish.** **Actions → Web app → Run workflow**. When the run is green, the app is live at
+   `https://<your-project-id>.web.app` (for this repository, https://the-vault-1399a.web.app).
+
+If your project ID is different, change `projectId` in `.github/workflows/web.yml` to match. Until the secret
+exists, the workflow still builds the web app and attaches it to the run, and skips publishing with a note.
+
 ---
 
 ## Part 2: Install the app
 
-### Android phone
+### Phones: the web app (iPhone and Android)
+
+Send everyone the link, `https://<your-project-id>.web.app`. On an iPhone they open it in **Safari** and choose
+**Share → Add to Home Screen**; on Android, they open it in **Chrome** and choose **⋮ → Install app**. The web app
+updates itself whenever a new version is published, so there's nothing to resend. Step-by-step instructions for
+family members are in the User's Manual, section 1.
+
+It runs the same vault-core as the other apps (compiled to WebAssembly), keeps its copy of the vault in the
+browser's storage, and opens offline. Like the Android app, it always works through a family account.
+
+### Android phone (.apk)
+
+The web app above is simpler; the `.apk` remains available.
 
 1. On GitHub, open the repository's **Actions** tab, then the **Android app** workflow, then the latest
    successful run **after** you committed `firebaseConfig.js`.
 2. Download **vault-android-apk** from *Artifacts* and unzip it to get the `.apk` file.
 3. Send it to each family member's phone and open it. Allow *Install unknown apps* when Android asks.
 
-### iOS (later)
+### iOS
 
-The app is already set up for iOS. Building it needs a Mac with Xcode and an Apple Developer account
-(US$99/year): `npm run tauri ios init`, then `npm run tauri ios build`.
+iPhones use the web app above. A native iOS app is also possible (the Tauri project is set up for it), but it needs
+a Mac with Xcode and an Apple Developer account (US$99/year): `npm run tauri ios init`, then
+`npm run tauri ios build`.
 
 ## Part 3: Create your account (each family member)
 
@@ -155,13 +191,16 @@ Each file in it is a normal Vault database.
 
 ```
 vault-core/        All business logic (every command), plus apply_op: applying the numbered list of changes.
+vault-web/         vault-core compiled to WebAssembly for the web app (see vault-web/README.md).
 src-tauri/         The desktop and mobile app shell: local vaults, and this device's sync replicas.
 src/api.js         The single door to the data: the local vault, or the synced vault via the sync engine.
 src/sync/
   engine.js          Keeps a replica in step with the shared list of changes; checkpoints; offline handling.
   firestoreRemote.js The shared list of changes in Cloud Firestore.
   account.js         Family accounts on Firebase Authentication.
-  tauriReplica.js    The replica, run by vault-core through Tauri commands.
+  tauriReplica.js    The replica, run by vault-core through Tauri commands (desktop and Android).
+  webReplica.js      The web app's replica: vault-core in WebAssembly, saved to IndexedDB (browserStore.js).
+src/UpdateBanner.jsx The web app's "new version ready" bar (the service worker comes from vite-plugin-pwa).
 firestore.rules    The security rules (invite codes, privacy, append-only changes).
 ```
 
@@ -177,6 +216,9 @@ Tests:
 
 ```bash
 cd vault-core && cargo test   # business logic and replica rules
-npm test                      # sync engine against real vault-core replicas
+npm run build:wasm && npm test  # sync engine against real vault-core replicas, native and WebAssembly
 npm run test:firebase         # security rules + sync over the Firestore & Auth emulators (needs Java)
 ```
+
+The web app: `npm run dev:web` serves it locally, `npm run build:web` builds it into `dist-web/`. Both need the
+WebAssembly tools listed in `vault-web/README.md`.
