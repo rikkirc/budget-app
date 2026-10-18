@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "./api";
+import { generateScheduleList } from "./loanSchedule";
 
 export default function Debt() {
   const [loans, setLoans] = useState([]);
@@ -123,51 +124,6 @@ export default function Debt() {
     const [year, month, day] = dateStr.split('-');
     const date = new Date(year, month - 1, day);
     return date.toLocaleDateString("en-US", { month: "long", day: "2-digit", year: "numeric" });
-  };
-
-  const getPrecedingPayday = (targetDate, p1, p2) => {
-    let gapDate = new Date(targetDate);
-    gapDate.setUTCDate(gapDate.getUTCDate() - 11);
-    let year = gapDate.getUTCFullYear();
-    let month = gapDate.getUTCMonth();
-    const getPaydate = (y, m, d) => (d >= 30) ? new Date(Date.UTC(y, m + 1, 0)) : new Date(Date.UTC(y, m, d));
-    let candidates = [
-        getPaydate(year, month - 1, p1),
-        getPaydate(year, month - 1, p2),
-        getPaydate(year, month, p1),
-        getPaydate(year, month, p2),
-        getPaydate(year, month + 1, p1)
-    ];
-    let valid = candidates.filter(c => c <= gapDate);
-    valid.sort((a, b) => b - a);
-    return valid[0]; 
-  };
-
-  const generateScheduleList = (baseDateStr, termVal, type, freq, amount, p1, p2) => {
-    let schedule = [];
-    let totalMonths = type === "Years" ? termVal * 12 : termVal;
-    let isBiMonthly = freq === "Bi-Monthly";
-    
-    for (let i = 0; i < totalMonths; i++) {
-        let currentDue = new Date(baseDateStr);
-        currentDue.setUTCMonth(currentDue.getUTCMonth() + i);
-        let dueStr = currentDue.toISOString().split('T')[0];
-        
-        if (isBiMonthly) {
-            let secondHalfPayday = getPrecedingPayday(currentDue, p1, p2);
-            let firstHalfDue = new Date(currentDue);
-            firstHalfDue.setUTCDate(firstHalfDue.getUTCDate() - 15);
-            let firstHalfDueStr = firstHalfDue.toISOString().split('T')[0];
-            let firstHalfPayday = getPrecedingPayday(firstHalfDue, p1, p2);
-            
-            schedule.push({ label: "1st Half", dueDate: firstHalfDueStr, paydayDate: firstHalfPayday.toISOString().split('T')[0], amount: amount / 2 });
-            schedule.push({ label: "2nd Half (Due)", dueDate: dueStr, paydayDate: secondHalfPayday.toISOString().split('T')[0], amount: amount / 2 });
-        } else {
-            let payday = getPrecedingPayday(currentDue, p1, p2);
-            schedule.push({ label: "Due Date", dueDate: dueStr, paydayDate: payday.toISOString().split('T')[0], amount: amount });
-        }
-    }
-    return schedule;
   };
 
   const handlePreviewSchedule = () => {

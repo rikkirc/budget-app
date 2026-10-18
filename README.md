@@ -1,8 +1,10 @@
 # The Vault
 
+🌐 **Live: [thevault-rc.web.app](https://thevault-rc.web.app)** · 👀 **[Try the demo (no account needed)](https://thevault-rc.web.app/?demo)**
+
 A budgeting app for ordinary paycheck to paycheck people: an installable web app (PWA) for iPhone, Android and computers, built with React, Vite and Rust compiled to WebAssembly. Each profile gets its own SQLite "vault", synced in real time between your devices through Firebase.
 
-🌐 **Live at [thevault-rc.web.app](https://thevault-rc.web.app)**. The earlier Windows (`.exe`) and Android (`.apk`) apps, built with [Tauri](https://tauri.app/), are retired: their code is still here, but they're no longer built or updated.
+The earlier Windows (`.exe`) and Android (`.apk`) apps, built with [Tauri](https://tauri.app/), are retired: their code is still here, but they're no longer built or updated.
 
 ▶️ **[Watch the sync demo](https://drive.google.com/file/d/1LszPGQpBaUTLtbLXiTfI56x02FueR9nd/view)**: a bill paid on the phone shows up on the desktop within a second.
 

@@ -2,15 +2,38 @@
 
 What's done, what's next, and what's blocked. Newest entries first.
 
-## Current state (2026-10-15) — v0.2.0 + layout fixes (#18) + edit buttons (#19)
+## Current state (2026-10-19) — v0.3.0
 
-- **Platforms:** Windows desktop (Tauri) and Android.
-- **Sync:** optional real-time sync between devices through Firebase (free Spark plan), with family accounts gated by an invite code. Without sync, each vault stays on the device.
-- **Features:** Dashboard, Cash Flow with per-account history, Bi-Monthly Budget, Loan Generator, Search, smart bill reminders, and editing for accounts, bills and loans.
-- **Docs:** README, User's Manual (Markdown + PDF), sync and mobile setup guide.
-- **Tests:** 39 Rust backend tests (run on Linux CI), 16 frontend tests (search, bill names, sync engine), and Firebase security-rule tests on the emulators.
+- **Platforms:** the web app (an installable PWA) on iPhone and Android, and on computers through Edge or Chrome, at https://thevault-rc.web.app. It updates itself and opens offline. The Windows desktop (Tauri) and Android apps are retired (#25): their code is kept, but they're no longer built.
+- **Sync:** real-time sync between devices through Firebase (free Spark plan), with accounts gated by an invite code. The web app is published by Firebase Hosting on every merge to `main`.
+- **Try the demo:** a made-up vault that opens from the welcome screen (or a `?demo` link) with no account, kept in the browser tab only and never saved.
+- **Features:** Dashboard, Cash Flow with per-account history, Bi-Monthly Budget, Loan Generator, Search, smart bill reminders, editing for accounts, bills and loans, a welcome screen with Terms & Privacy, stay signed in, and receipts with the date each bill was settled.
+- **Docs:** README, User's Manual (Markdown + PDF, also downloadable from the welcome screen), sync setup guide, case study.
+- **Tests:** 44 Rust backend tests, run natively and again inside WebAssembly; a check that the browser and desktop builds turn the same changes into identical vaults; 27 frontend tests (search, bill names, loan schedules, sync engine, demo vault); and Firebase security-rule tests on the emulators.
 
 ## Log
+
+### 2026-10-18 (night) — #24
+- The manual's opening line matches the welcome screen ("A budgeting app for ordinary paycheck to paycheck people"), and the PDF is rebuilt.
+- The website now republishes when only the manual PDF changes, so the welcome screen's download is never out of date.
+
+### 2026-10-18 (night) — #23
+- Welcome screen wording: who the app is for, and "Sign in with your email, or create an account with the invite code." The invite code stays required.
+
+### 2026-10-18 (evening) — #22
+- v0.3.0. A welcome screen ("The Vault by RCbreezy ©") with how to start, the manual PDF to download, and honest Terms & Privacy to accept.
+- Stay signed in, and open a remembered profile automatically. Enter submits sign-in.
+- Receipts show the date each bill was settled. A transaction's description is optional. New bills can let the tracker pick the paycheck.
+- The header shows the app name with the date and time. The short link thevault-rc.web.app. The manual explains one account, many profiles.
+
+### 2026-10-18 (afternoon) — #21
+- The web app became installable (home-screen icon, full screen), opens offline, and offers an update banner when a new version is out.
+- Published to Firebase Hosting automatically by GitHub Actions.
+- Fixed: opening a vault right after creating an account could fail with "permission denied".
+
+### 2026-10-18 (morning) — #20
+- vault-core compiled to WebAssembly, so the browser runs the same Rust rules as the desktop and Android apps. The browser keeps its copy of each vault in IndexedDB.
+- CI runs vault-core's tests natively and inside WebAssembly, and checks that both builds turn the same list of changes into identical vaults.
 
 ### 2026-10-15 (late evening) — #19
 - Edit buttons: rename accounts (Cash Flow), edit bills (name, amount, due date; split bills edit as one), edit loans (name and date acquired). Renames carry through to bills, receipts and loan schedules.
@@ -64,5 +87,4 @@ What's done, what's next, and what's blocked. Newest entries first.
 ## Known limits
 
 - Synced data is stored unencrypted in Firestore; anyone who controls the Firebase project can read it. Fine for a family, not something to promise a client.
-- No iOS build.
 - Every synced device must run the same version: an older app can't apply a rename and keeps showing the old name.

@@ -1,6 +1,6 @@
 # Case study: Vault, a budget app that runs on payday
 
-**Built by:** Rikki Cabanlet · **Built with:** AI-assisted coding (Claude) in VS Code · **Stack:** Tauri, React, Rust, SQLite, Firebase · **Time:** at least four days, 19 merged pull requests
+**Built by:** Rikki Cabanlet · **Built with:** AI-assisted coding (Claude) in VS Code · **Stack:** React, Rust, SQLite, WebAssembly, IndexedDB, Firebase (Firestore, Auth, Hosting), Tauri · **Time:** about a week, 26 pull requests
 
 ## The problem
 
@@ -8,17 +8,22 @@ Most budgeting apps think in calendar months. Many Filipino workers, especially 
 
 ## What I built
 
-A desktop and Android app where every bill is assigned to the paycheck that will pay it. Each paycheck gets its own tab with its own total. Bills whose amount isn't known yet, like electricity, are flagged as TBD so they aren't forgotten. A loan generator turns a loan into a full bi-monthly payment schedule and drops each payment into the right paycheck.
+An app where every bill is assigned to the paycheck that will pay it. It started as a Windows and Android app and is now a web app that installs on iPhone, Android and computers. Each paycheck gets its own tab with its own total. Bills whose amount isn't known yet, like electricity, are flagged as TBD so they aren't forgotten. A loan generator turns a loan into a full bi-monthly payment schedule and drops each payment into the right paycheck.
 
 ## The hard part: syncing money safely
 
-A household needs the same data on more than one device. I added optional real-time sync through Firebase's free plan, with no server to rent. Money made this harder than ordinary syncing: a payment recorded twice is a real error, not a cosmetic one. So every change is stored once, in order, in a log that can't be edited, and the app never retries a failed change on its own. It tells the user instead. Each device also keeps a full offline copy. Access is limited by an invite code, and each account can only read its own data.
+A household needs the same data on more than one device. I added real-time sync through Firebase's free plan, with no server to rent. Money made this harder than ordinary syncing: a payment recorded twice is a real error, not a cosmetic one. So every change is stored once, in order, in a log that can't be edited, and the app never retries a failed change on its own. It tells the user instead. Each device also keeps a full offline copy. Access is limited by an invite code, and each account can only read its own data.
+
+## The other hard part: one engine, every device
+
+All the money rules (allocating bills, splitting halves, paying loans, rounding to the centavo) live in one Rust engine, vault-core. The Windows and Android apps ran it natively; the web app runs the same code compiled to WebAssembly in the browser. Sync only works if every device turns the same list of changes into exactly the same balances, so a centavo of difference between builds would split a family's data. CI proves they agree: it runs the engine's tests natively and again inside WebAssembly, and replays the same changes through the desktop build and the browser build and requires identical vaults. That is what made it safe to retire the Windows and Android apps for the web app.
 
 ## Result
 
-- Windows and Android apps, with changes showing on the other device within about a second ([demo video](https://drive.google.com/file/d/1LszPGQpBaUTLtbLXiTfI56x02FueR9nd/view))
-- Automated tests for the backend, the sync engine and the database security rules
-- A user's manual in Markdown and PDF
+- A web app at [thevault-rc.web.app](https://thevault-rc.web.app) that installs on iPhone, Android and computers, updates itself and works offline, with changes showing on other devices within about a second ([demo video](https://drive.google.com/file/d/1LszPGQpBaUTLtbLXiTfI56x02FueR9nd/view))
+- **Try the demo** with no account: a made-up vault that lives only in the browser tab
+- Automated tests for the backend (natively and in WebAssembly), the sync engine, the demo vault and the database security rules
+- A user's manual in Markdown and PDF, downloadable from the app
 
 ## What I'd do differently
 

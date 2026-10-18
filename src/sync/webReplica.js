@@ -27,7 +27,7 @@ export function webReplica(uid, profile, { store = indexedDbStore, wasm } = {}) 
         console.warn("Vault: the saved copy couldn't be opened, so it will be downloaded again", e);
         vault = new WebVault(undefined);
       }
-      if (!wasm) keepStorage();
+      if (store === indexedDbStore) keepStorage();
       return vault.lastSeq();
     },
     async apply(ops) {
@@ -46,3 +46,9 @@ export function webReplica(uid, profile, { store = indexedDbStore, wasm } = {}) 
 
 // The name src/api.js imports, whichever replica this build uses (see vite.config.js)
 export const deviceReplica = webReplica;
+
+/** Keeps nothing: the demo vault (src/sync/demo.js) starts empty every time and is never written to the browser */
+export const nothingSaved = { load: async () => undefined, save: async () => {} };
+
+/** A replica for "Try the demo": in memory only. Only the web app has one (the Tauri build exports null). */
+export const demoReplica = (options = {}) => webReplica("demo", "demo", { ...options, store: nothingSaved });
