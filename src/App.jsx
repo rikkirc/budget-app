@@ -7,6 +7,20 @@ import Debt from "./Debt";
 import CashFlow from "./CashFlow";
 import Search from "./Search";
 import SyncSettings from "./SyncSettings";
+import Welcome from "./Welcome";
+import { rememberedProfile, rememberProfile, forgetProfile } from "./preferences";
+
+// "Sat, Oct 18, 2026 · 9:41 PM", kept current while the app is open
+function Clock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 15000);
+    return () => clearInterval(timer);
+  }, []);
+  const date = now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+  const time = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return <span>{date} · {time}</span>;
+}
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -19,6 +33,12 @@ export default function App() {
   const [showSync, setShowSync] = useState(false);
   const [liveLink, setLiveLink] = useState(false);
   const [changedElsewhere, setChangedElsewhere] = useState(false);
+  // The welcome screen comes first whenever the app opens to the sign-in or unlock screen
+  const [welcomeDone, setWelcomeDone] = useState(false);
+  // "Open this profile automatically next time" on the unlock screen
+  const [rememberMe, setRememberMe] = useState(true);
+  const [autoOpening, setAutoOpening] = useState(null); // the profile being opened automatically
+  const autoTried = useRef(new Set());
 
   // Real-time sync: when the phone (or desktop) changes something, every open screen here reloads its data.
   // If you're in the middle of typing, it waits and offers a Refresh instead, so your half-filled form isn't wiped.
@@ -57,6 +77,7 @@ export default function App() {
   const handleSyncChanged = async ({ signedOut = false } = {}) => {
     setShowSync(false);
     if (!isLoggedIn) return;
+    if (signedOut) forgetProfile();
     // The phone and web apps have no vault of their own, so signing out locks the vault
     if (signedOut && SYNC_ONLY) { setIsLoggedIn(false); setProfileName(""); return; }
     // Reopen the same profile on whichever side now holds the data
@@ -65,23 +86,39 @@ export default function App() {
     refresh();
   };
 
-  const handleLogin = async () => {
-    if (!profileName) {
+  // auto: opening the remembered profile when the app starts (no "Logged in" pop-up, and the unlock screen if it fails)
+  const handleLogin = async (name = profileName, { auto = false } = {}) => {
+    if (!name) {
       alert("Please enter a profile name!");
       return;
     }
     let response;
     try {
-      response = await invoke("login_user", { profile: profileName });
+      response = await invoke("login_user", { profile: name });
     } catch (e) {
       alert(e);
       return;
     }
-    alert(response);
+    if (!auto || !String(response).startsWith("SUCCESS")) alert(response);
+    if (auto || rememberMe) rememberProfile(name, sync?.email); else forgetProfile();
     unlockedSynced.current = isSignedIn();
+    setProfileName(name);
     setIsLoggedIn(true);
     await checkUpcomingRecurringBills();
   };
+
+  // Open the remembered profile as soon as we know who is signed in (on the phone and web: once signed in)
+  useEffect(() => {
+    if (account === undefined || isLoggedIn || (SYNC_ONLY && !account)) return;
+    const key = account?.email ?? "(this computer)";
+    if (autoTried.current.has(key)) return;
+    autoTried.current.add(key);
+    const saved = rememberedProfile(account?.email);
+    if (!saved) return;
+    setAutoOpening(saved);
+    setProfileName(saved);
+    handleLogin(saved, { auto: true }).finally(() => setAutoOpening(null));
+  }, [account, isLoggedIn]);
 
   const checkUpcomingRecurringBills = async () => {
     try {
@@ -114,6 +151,8 @@ export default function App() {
 
   const handleLogout = () => {
     if (window.confirm("Are you sure you want to lock the vault and log out?")) {
+      // Logging out on purpose means: don't open this profile by itself next time
+      forgetProfile();
       setIsLoggedIn(false);
       setProfileName(""); 
       setActiveTab("Dashboard"); 
@@ -121,8 +160,14 @@ export default function App() {
   };
 
   if (account === undefined) {
-    return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", backgroundColor: "#f3f4f6", color: "#6b7280" }}>Opening Vault…</div>;
+    return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", backgroundColor: "#f3f4f6", color: "#6b7280" }}>Opening The Vault…</div>;
   }
+
+  if (autoOpening && !isLoggedIn) {
+    return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", backgroundColor: "#f3f4f6", color: "#6b7280" }}>Opening {autoOpening}…</div>;
+  }
+
+  if (!isLoggedIn && !welcomeDone) return <Welcome onProceed={() => setWelcomeDone(true)} />;
 
   // The phone and web apps always work through a family account, so they must be signed in before the first unlock
   if (!isLoggedIn && (showSync || (SYNC_ONLY && !sync))) {
@@ -137,9 +182,11 @@ export default function App() {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", backgroundColor: "#f3f4f6" }}>
         <div style={{ backgroundColor: "white", padding: "40px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.1)", textAlign: "center" }}>
-          <h1 style={{ color: "#1e3a8a", margin: "0 0 10px 0" }}>Financial Command Center</h1>
+          <h1 style={{ color: "#1e3a8a", margin: "0 0 4px 0" }}>🔐 The Vault</h1>
+          <div style={{ color: "#6b7280", fontSize: "13px", marginBottom: "15px" }}>by RCbreezy ©</div>
           <p style={{ color: "#6b7280", marginBottom: "30px" }}>Please enter your secure profile name to unlock your vault.</p>
-          
+          {/* A form, so pressing Enter unlocks */}
+          <form onSubmit={e => { e.preventDefault(); handleLogin(); }}>
           <input 
             type="text" 
             placeholder="Enter your desired profile name" 
@@ -148,12 +195,18 @@ export default function App() {
             style={{ padding: "12px", width: "250px", borderRadius: "5px", border: "1px solid #ccc", fontSize: "16px", marginBottom: "20px" }}
           />
           <br />
+          <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "14px", color: "#374151", marginBottom: "20px", cursor: "pointer" }}>
+            <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} style={{ width: "18px", height: "18px" }} />
+            Open this profile automatically next time
+          </label>
+          <br />
           <button 
-            onClick={handleLogin}
+            type="submit"
             style={{ padding: "12px 24px", backgroundColor: "#2563eb", color: "white", border: "none", borderRadius: "5px", cursor: "pointer", fontWeight: "bold", fontSize: "16px" }}
           >
             🔐 Unlock Vault
           </button>
+          </form>
           {SYNC_AVAILABLE && (
             <p style={{ color: "#6b7280", fontSize: "14px", marginTop: "25px", marginBottom: 0 }}>
               {sync ? `☁️ Signed in as ${sync.email}` : SYNC_ONLY ? "" : "💻 This computer only"}
@@ -168,7 +221,14 @@ export default function App() {
 
   return (
     <div style={{ padding: "20px", fontFamily: "Arial, sans-serif", backgroundColor: "#f3f4f6", minHeight: "100vh" }}>
-      
+      <div className="app-brand" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "4px 15px", marginBottom: "12px", padding: "0 5px" }}>
+        <div>
+          <span style={{ fontSize: "22px", fontWeight: "bold", color: "#1e3a8a" }}>The Vault</span>
+          <span style={{ fontSize: "13px", color: "#6b7280", marginLeft: "8px" }}>by RCbreezy ©</span>
+        </div>
+        <div style={{ fontSize: "14px", color: "#4b5563" }}><Clock /></div>
+      </div>
+
       <div className="app-header" style={{ display: "flex", gap: "10px", marginBottom: "20px", backgroundColor: "white", padding: "15px", borderRadius: "8px", boxShadow: "0 2px 4px rgba(0,0,0,0.1)", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
         
         <div className="app-tabs" style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>

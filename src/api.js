@@ -4,7 +4,7 @@
 //   Firebase first so every phone and computer stays identical (see src/sync/engine.js).
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { initializeApp } from "firebase/app";
-import { connectAuthEmulator, getAuth, onAuthStateChanged } from "firebase/auth";
+import { browserLocalPersistence, browserSessionPersistence, connectAuthEmulator, getAuth, onAuthStateChanged, setPersistence } from "firebase/auth";
 import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
 import { firebaseConfig, isFirebaseConfigured } from "./firebaseConfig";
 import * as account from "./sync/account";
@@ -67,11 +67,18 @@ export function onAccountChange(callback) {
 }
 
 // Remember the account straight away, so an upload right after signing in never waits on Firebase's sign-in event
-export async function signUp(email, password, inviteCode) {
+// remember = false: signed in only until the app (or browser) is closed. Otherwise the sign-in lasts until you sign out.
+const keepSignedIn = (remember) => setPersistence(services().auth, remember ? browserLocalPersistence : browserSessionPersistence);
+
+export async function signUp(email, password, inviteCode, remember = true) {
+  await keepSignedIn(remember);
   joining = account.signUp(services(), email, password, inviteCode);
   try { user = await joining; } finally { joining = null; }
 }
-export async function signIn(email, password) { user = await account.signIn(services(), email, password); }
+export async function signIn(email, password, remember = true) {
+  await keepSignedIn(remember);
+  user = await account.signIn(services(), email, password);
+}
 /** Whether commands currently go to a synced vault */
 export const isSignedIn = () => !!user;
 export const sendPasswordReset = (email) => account.sendReset(services(), email);

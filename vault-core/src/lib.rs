@@ -11,7 +11,7 @@ use std::path::Path;
 #[derive(Serialize)] pub struct TransactionLog { pub id: i32, pub account_name: String, pub tx_type: String, pub amount: f64, pub description: String, pub is_reversed: bool, pub created_at: String, pub linked_account_name: String }
 #[derive(Serialize)] pub struct SmartBill { pub id: i32, pub name: String, pub amount: f64, pub due_date: String, pub payday_date: String, pub is_recurring: bool, pub loan_id: i32, pub series_id: i32 }
 #[derive(Serialize)] pub struct Loan { pub id: i32, pub name: String, pub principal: f64, pub remaining_balance: f64, pub term: i32, pub term_type: String, pub frequency: String, pub payment_amount: f64, pub next_due_date: String, pub payday_date: String, pub total_incurred: f64, pub due_structure: String, pub date_acquired: String }
-#[derive(Serialize)] pub struct PaidBill { pub id: i32, pub original_bill_id: i32, pub name: String, pub amount: f64, pub due_date: String, pub payday_date: String, pub account_id: i32, pub from_account_id: i32, pub loan_id: i32 }
+#[derive(Serialize)] pub struct PaidBill { pub id: i32, pub original_bill_id: i32, pub name: String, pub amount: f64, pub due_date: String, pub payday_date: String, pub account_id: i32, pub from_account_id: i32, pub loan_id: i32, pub paid_at: String }
 #[derive(Serialize)] pub struct CompletedLoan { pub id: i32, pub original_id: i32, pub name: String, pub principal: f64, pub term: i32, pub term_type: String, pub frequency: String, pub payment_amount: f64, pub total_incurred: f64, pub completed_date: String }
 #[derive(Serialize)] pub struct SinkingFundInfo { pub found: bool, pub account_id: i32, pub account_name: String, pub amount: f64 }
 #[derive(Serialize)] pub struct ArchivedBill { pub id: i32, pub original_id: i32, pub name: String, pub amount: f64, pub due_date: String, pub payday_date: String }
@@ -63,6 +63,9 @@ pub fn init_schema(conn: &Connection) {
     let _ = conn.execute("ALTER TABLE archived_loans ADD COLUMN date_acquired TEXT NOT NULL DEFAULT ''", []);
     // Date & time each transaction was recorded (stamped automatically by the database, in local time)
     let _ = conn.execute("ALTER TABLE transactions ADD COLUMN created_at TEXT NOT NULL DEFAULT ''", []);
+    // When each receipt was settled (paid or saved to a fund), stamped the same way; blank for receipts from before this was recorded
+    let _ = conn.execute("ALTER TABLE paid_bills ADD COLUMN paid_at TEXT NOT NULL DEFAULT ''", []);
+    let _ = conn.execute_batch("CREATE TRIGGER IF NOT EXISTS set_paid_timestamp AFTER INSERT ON paid_bills WHEN NEW.paid_at = '' BEGIN UPDATE paid_bills SET paid_at = datetime('now','localtime') WHERE id = NEW.id; END;");
     let _ = conn.execute_batch("CREATE TRIGGER IF NOT EXISTS set_tx_timestamp AFTER INSERT ON transactions WHEN NEW.created_at = '' BEGIN UPDATE transactions SET created_at = datetime('now','localtime') WHERE id = NEW.id; END;");
 }
 
@@ -132,7 +135,16 @@ pub fn get_transactions_page(conn: &Connection, offset: i32, limit: i32, account
 fn get_transactions_page_impl(conn: &Connection, offset: i32, limit: i32, account_id: Option<i32>) -> Vec<TransactionLog> { let mut stmt = conn.prepare("SELECT t.id, a.name, t.tx_type, t.amount, t.description, t.is_reversed, t.created_at, COALESCE(pa.name, '') FROM transactions t JOIN accounts a ON t.account_id = a.id LEFT JOIN transactions p ON t.linked_id = p.id LEFT JOIN accounts pa ON p.account_id = pa.id WHERE (?3 IS NULL OR t.account_id = ?3) ORDER BY t.id DESC LIMIT ?1 OFFSET ?2").unwrap(); let iter = stmt.query_map(params![limit, offset, account_id], |row| { let reversed_int: i32 = row.get(5).unwrap_or(0); Ok(TransactionLog { id: row.get(0).unwrap_or(0), account_name: row.get(1).unwrap_or_else(|_| "".to_string()), tx_type: row.get(2).unwrap_or_else(|_| "".to_string()), amount: row.get(3).unwrap_or(0.0), description: row.get(4).unwrap_or_else(|_| "".to_string()), is_reversed: reversed_int != 0, created_at: row.get(6).unwrap_or_else(|_| "".to_string()), linked_account_name: row.get(7).unwrap_or_else(|_| "".to_string()) }) }).unwrap(); let mut logs = Vec::new(); for t in iter { if let Ok(l) = t { logs.push(l); } } logs }
 // split = true turns a recurring bill into a Sinking Fund pair: "(1st Half)" saved to a fund, "(2nd Half (Due))" paid on the real due date
 pub fn add_smart_bill(conn: &Connection, name: &str, amount: f64, due_date: &str, payday_date: &str, is_recurring: bool, split: Option<bool>) -> String { add_smart_bill_impl(&conn, name, amount, due_date, payday_date, is_recurring, split.unwrap_or(false)) }
+// A blank payday_date lets the tracker pick the paycheck: the latest payday at least 11 days before the due date,
+// the same rule it uses for loans and for next month's recurring bills
 fn add_smart_bill_impl(conn: &Connection, name: &str, amount: f64, due_date: &str, payday_date: &str, is_recurring: bool, split: bool) -> String {
+    let picked;
+    let payday_date = if payday_date.trim().is_empty() {
+        let normalized: Option<String> = conn.query_row("SELECT date(?1)", params![due_date], |r| r.get(0)).unwrap_or(None);
+        if normalized.as_deref() != Some(due_date) { return "ERROR: That due date isn't a real calendar date.".to_string(); }
+        picked = preceding_payday(conn, due_date);
+        picked.as_str()
+    } else { payday_date };
     if split {
         if !is_recurring { return "ERROR: Only recurring bills can be split into halves.".to_string(); }
         let series_id = next_series_id(conn);
@@ -461,8 +473,8 @@ fn undo_bill_payment_impl(conn: &Connection, paid_bill_id: i32) -> String {
     }
     "SUCCESS: Payment undone and refunded!".to_string()
 }
-pub fn get_paid_bills(conn: &Connection) -> Vec<PaidBill> { let mut stmt = conn.prepare("SELECT id, original_bill_id, name, amount, due_date, payday_date, account_id, from_account_id, loan_id FROM paid_bills ORDER BY id DESC").unwrap(); let iter = stmt.query_map([], |row| { Ok(PaidBill { id: row.get(0).unwrap_or(0), original_bill_id: row.get(1).unwrap_or(0), name: row.get(2).unwrap_or_else(|_| "".to_string()), amount: row.get(3).unwrap_or(0.0), due_date: row.get(4).unwrap_or_else(|_| "".to_string()), payday_date: row.get(5).unwrap_or_else(|_| "".to_string()), account_id: row.get(6).unwrap_or(0), from_account_id: row.get(7).unwrap_or(0), loan_id: row.get(8).unwrap_or(0) }) }).unwrap(); let mut archived = Vec::new(); for b in iter { if let Ok(item) = b { archived.push(item); } } archived }
-pub fn get_paid_bills_page(conn: &Connection, offset: i32, limit: i32) -> Vec<PaidBill> { let mut stmt = conn.prepare("SELECT id, original_bill_id, name, amount, due_date, payday_date, account_id, from_account_id, loan_id FROM paid_bills ORDER BY id DESC LIMIT ?1 OFFSET ?2").unwrap(); let iter = stmt.query_map(params![limit, offset], |row| { Ok(PaidBill { id: row.get(0).unwrap_or(0), original_bill_id: row.get(1).unwrap_or(0), name: row.get(2).unwrap_or_else(|_| "".to_string()), amount: row.get(3).unwrap_or(0.0), due_date: row.get(4).unwrap_or_else(|_| "".to_string()), payday_date: row.get(5).unwrap_or_else(|_| "".to_string()), account_id: row.get(6).unwrap_or(0), from_account_id: row.get(7).unwrap_or(0), loan_id: row.get(8).unwrap_or(0) }) }).unwrap(); let mut archived = Vec::new(); for b in iter { if let Ok(item) = b { archived.push(item); } } archived }
+pub fn get_paid_bills(conn: &Connection) -> Vec<PaidBill> { let mut stmt = conn.prepare("SELECT id, original_bill_id, name, amount, due_date, payday_date, account_id, from_account_id, loan_id, paid_at FROM paid_bills ORDER BY id DESC").unwrap(); let iter = stmt.query_map([], |row| { Ok(PaidBill { id: row.get(0).unwrap_or(0), original_bill_id: row.get(1).unwrap_or(0), name: row.get(2).unwrap_or_else(|_| "".to_string()), amount: row.get(3).unwrap_or(0.0), due_date: row.get(4).unwrap_or_else(|_| "".to_string()), payday_date: row.get(5).unwrap_or_else(|_| "".to_string()), account_id: row.get(6).unwrap_or(0), from_account_id: row.get(7).unwrap_or(0), loan_id: row.get(8).unwrap_or(0), paid_at: row.get(9).unwrap_or_else(|_| "".to_string()) }) }).unwrap(); let mut archived = Vec::new(); for b in iter { if let Ok(item) = b { archived.push(item); } } archived }
+pub fn get_paid_bills_page(conn: &Connection, offset: i32, limit: i32) -> Vec<PaidBill> { let mut stmt = conn.prepare("SELECT id, original_bill_id, name, amount, due_date, payday_date, account_id, from_account_id, loan_id, paid_at FROM paid_bills ORDER BY id DESC LIMIT ?1 OFFSET ?2").unwrap(); let iter = stmt.query_map(params![limit, offset], |row| { Ok(PaidBill { id: row.get(0).unwrap_or(0), original_bill_id: row.get(1).unwrap_or(0), name: row.get(2).unwrap_or_else(|_| "".to_string()), amount: row.get(3).unwrap_or(0.0), due_date: row.get(4).unwrap_or_else(|_| "".to_string()), payday_date: row.get(5).unwrap_or_else(|_| "".to_string()), account_id: row.get(6).unwrap_or(0), from_account_id: row.get(7).unwrap_or(0), loan_id: row.get(8).unwrap_or(0), paid_at: row.get(9).unwrap_or_else(|_| "".to_string()) }) }).unwrap(); let mut archived = Vec::new(); for b in iter { if let Ok(item) = b { archived.push(item); } } archived }
 pub fn get_archived_loans(conn: &Connection) -> Vec<Loan> { let mut stmt = conn.prepare("SELECT id, name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure, date_acquired FROM archived_loans ORDER BY id DESC").unwrap(); let iter = stmt.query_map([], |row| { Ok(Loan { id: row.get(0).unwrap_or(0), name: row.get(1).unwrap_or_else(|_| "".to_string()), principal: row.get(2).unwrap_or(0.0), remaining_balance: row.get(3).unwrap_or(0.0), term: row.get(4).unwrap_or(0), term_type: row.get(5).unwrap_or_else(|_| "".to_string()), frequency: row.get(6).unwrap_or_else(|_| "".to_string()), payment_amount: row.get(7).unwrap_or(0.0), next_due_date: row.get(8).unwrap_or_else(|_| "".to_string()), payday_date: row.get(9).unwrap_or_else(|_| "".to_string()), total_incurred: row.get(10).unwrap_or(0.0), due_structure: row.get(11).unwrap_or_else(|_| "Sinking Fund".to_string()), date_acquired: row.get(12).unwrap_or_else(|_| "".to_string()) }) }).unwrap(); let mut loans = Vec::new(); for l in iter { if let Ok(item) = l { loans.push(item); } } loans }
 pub fn get_completed_loans(conn: &Connection) -> Vec<CompletedLoan> { let mut stmt = conn.prepare("SELECT id, original_id, name, principal, term, term_type, frequency, payment_amount, total_incurred, completed_date FROM completed_loans ORDER BY id DESC").unwrap(); let iter = stmt.query_map([], |row| { Ok(CompletedLoan { id: row.get(0).unwrap_or(0), original_id: row.get(1).unwrap_or(0), name: row.get(2).unwrap_or_else(|_| "".to_string()), principal: row.get(3).unwrap_or(0.0), term: row.get(4).unwrap_or(0), term_type: row.get(5).unwrap_or_else(|_| "".to_string()), frequency: row.get(6).unwrap_or_else(|_| "".to_string()), payment_amount: row.get(7).unwrap_or(0.0), total_incurred: row.get(8).unwrap_or(0.0), completed_date: row.get(9).unwrap_or_else(|_| "".to_string()) }) }).unwrap(); let mut completed = Vec::new(); for l in iter { if let Ok(item) = l { completed.push(item); } } completed }
 pub fn undo_delete_loan(conn: &Connection, archive_id: i32, bill_names: Vec<String>, bill_amounts: Vec<f64>, bill_dues: Vec<String>, bill_paydays: Vec<String>) -> String { let mut stmt = conn.prepare("SELECT name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure, date_acquired FROM archived_loans WHERE id = ?1").unwrap(); let mut rows = stmt.query(params![archive_id]).unwrap(); if let Some(row) = rows.next().unwrap() { let name: String = row.get(0).unwrap(); let principal: f64 = row.get(1).unwrap(); let remaining_balance: f64 = row.get(2).unwrap(); let term: i32 = row.get(3).unwrap(); let term_type: String = row.get(4).unwrap(); let frequency: String = row.get(5).unwrap(); let payment_amount: f64 = row.get(6).unwrap(); let next_due_date: String = row.get(7).unwrap(); let payday_date: String = row.get(8).unwrap(); let total_incurred: f64 = row.get(9).unwrap_or(0.0); let due_structure: String = row.get(10).unwrap_or_else(|_| "Sinking Fund".to_string()); let date_acquired: String = row.get(11).unwrap_or_else(|_| "".to_string()); let _ = conn.execute("INSERT INTO loans (name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure, date_acquired) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)", params![name, principal, remaining_balance, term, term_type, frequency, payment_amount, next_due_date, payday_date, total_incurred, due_structure, date_acquired]); let restored_loan_id = conn.last_insert_rowid(); for i in 0..bill_names.len() { let _ = conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id) VALUES (?1, ?2, ?3, ?4, ?5)", params![bill_names[i], bill_amounts[i], bill_dues[i], bill_paydays[i], restored_loan_id]); } let _ = conn.execute("DELETE FROM archived_loans WHERE id = ?1", params![archive_id]); } "SUCCESS: Loan restored!".to_string() }
@@ -773,8 +785,10 @@ pub fn apply_op(conn: &Connection, seq: i64, cmd: &str, args: &Value, at: &str) 
     conn.execute_batch("BEGIN IMMEDIATE").map_err(|e| format!("ERROR: Could not start: {}", e))?;
     let outcome = (|| -> Result<Value, String> {
         let before: i64 = conn.query_row("SELECT COALESCE(MAX(id), 0) FROM transactions", [], |r| r.get(0)).map_err(|e| e.to_string())?;
+        let receipts_before: i64 = conn.query_row("SELECT COALESCE(MAX(id), 0) FROM paid_bills", [], |r| r.get(0)).map_err(|e| e.to_string())?;
         let result = match dispatch(conn, cmd, args) { Ok(v) => serde_json::json!({ "result": v }), Err(e) => serde_json::json!({ "error": e }) };
         conn.execute("UPDATE transactions SET created_at = ?1 WHERE id > ?2", params![at, before]).map_err(|e| e.to_string())?;
+        conn.execute("UPDATE paid_bills SET paid_at = ?1 WHERE id > ?2", params![at, receipts_before]).map_err(|e| e.to_string())?;
         set_applied_seq(conn, seq)?;
         Ok(result)
     })();
@@ -990,6 +1004,54 @@ mod tests {
 
     fn paid_receipt_id(conn: &Connection, name: &str) -> i32 {
         conn.query_row("SELECT id FROM paid_bills WHERE name LIKE ?1 ORDER BY id DESC LIMIT 1", params![format!("{}%", name)], |r| r.get(0)).unwrap()
+    }
+
+    #[test]
+    fn a_new_bill_without_a_paycheck_gets_the_usual_one() {
+        let conn = test_db();
+        assert_eq!(add_smart_bill_impl(&conn, "Internet", 1699.0, "2026-11-20", "", true, false), "SUCCESS!");
+        assert_eq!(payday_of(&conn, bill_id_named(&conn, "Internet", "2026-11-20")), "2026-10-31", "latest payday at least 11 days before Nov 20");
+        // Split: the 2nd Half gets the usual paycheck too
+        add_smart_bill_impl(&conn, "Rent", 9000.0, "2026-12-05", "", true, true);
+        assert_eq!(payday_of(&conn, bill_id_named(&conn, "Rent (2nd Half (Due))", "2026-12-05")), "2026-11-15");
+        assert_eq!(payday_of(&conn, bill_id_named(&conn, "Rent (1st Half)", "2026-11-20")), "2026-10-31");
+        // A paycheck the user picked is kept as is
+        add_smart_bill_impl(&conn, "Water", 500.0, "2026-11-20", "2026-11-15", false, false);
+        assert_eq!(payday_of(&conn, bill_id_named(&conn, "Water", "2026-11-20")), "2026-11-15");
+        assert!(add_smart_bill_impl(&conn, "Bad", 1.0, "2026-02-30", "", false, false).starts_with("ERROR"));
+    }
+
+    #[test]
+    fn receipts_record_when_they_were_settled() {
+        let conn = test_db();
+        let bank = fund_account(&conn, "Bank", 5000.0);
+        add_smart_bill_impl(&conn, "Internet", 1699.0, "2026-11-20", "2026-10-31", true, false);
+        pay_bill_impl(&conn, bill_id_named(&conn, "Internet", "2026-11-20"), bank, 1699.0, "Paid");
+        let paid_at: String = conn.query_row("SELECT paid_at FROM paid_bills", [], |r| r.get(0)).unwrap();
+        assert_eq!(paid_at.len(), 19, "stamped with the date and time: {}", paid_at);
+        assert_eq!(get_paid_bills(&conn)[0].paid_at, paid_at);
+    }
+
+    #[test]
+    fn synced_receipts_take_their_settled_time_from_the_change() {
+        // Every device must show the same settled time, so it comes from the change, not the device's clock
+        let changes = [
+            ("add_account", serde_json::json!({ "name": "Bank" })),
+            ("log_income", serde_json::json!({ "accountId": 1, "amount": 20000.0, "description": "Pay" })),
+            ("add_smart_bill", serde_json::json!({ "name": "Rent", "amount": 9000.0, "dueDate": "2026-11-30", "paydayDate": "", "isRecurring": true, "split": true })),
+        ];
+        let phone = test_db();
+        let desktop = test_db();
+        for conn in [&phone, &desktop] {
+            for (i, (cmd, args)) in changes.iter().enumerate() { apply_op(conn, i as i64 + 1, cmd, args, "2026-10-15 08:00:00").unwrap(); }
+            let first = bill_id_named(conn, "Rent (1st Half)", "2026-11-15");
+            let second = bill_id_named(conn, "Rent (2nd Half (Due))", "2026-11-30");
+            apply_op(conn, 4, "pay_bill", &serde_json::json!({ "billId": second, "accountId": 1, "amount": 4500.0, "description": "Paid" }), "2026-11-29 18:30:00").unwrap();
+            assert!(first > 0);
+        }
+        let times = |conn: &Connection| -> Vec<String> { get_paid_bills(conn).into_iter().map(|b| b.paid_at).collect() };
+        assert_eq!(times(&phone), vec!["2026-11-29 18:30:00", "2026-11-29 18:30:00"], "both halves, settled together");
+        assert_eq!(times(&phone), times(&desktop));
     }
 
     #[test]

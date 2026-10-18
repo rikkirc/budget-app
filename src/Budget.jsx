@@ -20,6 +20,7 @@ export default function Budget() {
   const [newBillAmount, setNewBillAmount] = useState("");
   const [newBillDue, setNewBillDue] = useState("");
   const [newBillPayday, setNewBillPayday] = useState("");
+  const [newBillAutoPayday, setNewBillAutoPayday] = useState(true); // let the tracker pick the paycheck
   const [newBillRecurring, setNewBillRecurring] = useState(false);
   const [newBillSplit, setNewBillSplit] = useState(false);
   const [editingAmountId, setEditingAmountId] = useState(null);
@@ -75,18 +76,20 @@ export default function Budget() {
   const handleAddBill = async (e) => {
     e.preventDefault();
     // Amount is now optional ONLY if this is a recurring bill (TBD placeholder). Otherwise it's still required.
-    if (!newBillName || !newBillDue || !newBillPayday || (!newBillRecurring && !newBillAmount)) {
+    if (!newBillName || !newBillDue || (!newBillAutoPayday && !newBillPayday) || (!newBillRecurring && !newBillAmount)) {
         return alert("Please fill out all fields!");
     }
-    await invoke("add_smart_bill", {
+    const response = await invoke("add_smart_bill", {
         name: newBillName,
         amount: newBillAmount ? parseFloat(newBillAmount) : 0,
         dueDate: newBillDue,
-        paydayDate: newBillPayday,
+        paydayDate: newBillAutoPayday ? "" : newBillPayday, // blank: the tracker picks it, by the same rule as loans
         isRecurring: newBillRecurring,
         split: newBillRecurring && newBillSplit
     });
-    alert(newBillRecurring && newBillSplit ? "Success: Bill Added as a 1st Half and 2nd Half (Due)!" : "Success: Bill Added!");
+    if (String(response).startsWith("ERROR")) return alert(response);
+    const paycheck = newBillAutoPayday ? autoPayday(newBillDue) : newBillPayday;
+    alert(`${newBillRecurring && newBillSplit ? "Success: Bill Added as a 1st Half and 2nd Half (Due)!" : "Success: Bill Added!"}\n\nIt's on the ${formatDate(paycheck).replace(" BILLS", "")} paycheck${newBillRecurring && newBillSplit ? " (the 2nd Half)" : ""}.`);
     setNewBillName("");
     setNewBillAmount("");
     setNewBillDue("");
@@ -94,6 +97,19 @@ export default function Budget() {
     setNewBillRecurring(false);
     setNewBillSplit(false);
     loadData();
+  };
+
+  // The paycheck the tracker would pick: the latest payday (15th or end of month) at least 11 days before the due date.
+  // Only a preview: vault-core picks it the same way when the bill is saved.
+  const autoPayday = (due) => {
+    if (!due || due.length < 10 || !isRealDate(due)) return "";
+    const [year, month, day] = due.split("-").map(Number);
+    const gap = new Date(year, month - 1, day - 11);
+    const lastDay = new Date(gap.getFullYear(), gap.getMonth() + 1, 0).getDate();
+    const pick = gap.getDate() === lastDay ? gap
+      : gap.getDate() >= 15 ? new Date(gap.getFullYear(), gap.getMonth(), 15)
+      : new Date(gap.getFullYear(), gap.getMonth(), 0);
+    return `${pick.getFullYear()}-${String(pick.getMonth() + 1).padStart(2, "0")}-${String(pick.getDate()).padStart(2, "0")}`;
   };
 
   const handleSplitBill = async (bill) => {
@@ -281,6 +297,14 @@ export default function Budget() {
     return new Date(year, month - 1, day).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
   };
 
+  // "2026-11-29 18:30:00" -> "Nov 29, 2026, 6:30 PM" (receipts from before settled dates were recorded have none)
+  const formatSettled = (stamp) => {
+    const [date, time = "00:00:00"] = stamp.split(" ");
+    const [year, month, day] = date.split("-").map(Number);
+    const [hour, minute] = time.split(":").map(Number);
+    return new Date(year, month - 1, day, hour, minute).toLocaleString("en-US", { month: "short", day: "2-digit", year: "numeric", hour: "numeric", minute: "2-digit" });
+  };
+
   const groupedBills = bills.reduce((groups, bill) => {
     const date = bill.payday_date;
     if (!groups[date]) groups[date] = [];
@@ -320,7 +344,17 @@ export default function Budget() {
             </div>
             <div style={{ flex: 1, minWidth: "130px" }}>
                 <label style={{ display: "block", fontSize: "14px", fontWeight: "bold", color: "#4b5563", marginBottom: "5px" }}>{newBillRecurring && newBillSplit ? "2nd Half Paycheck" : "Paycheck Allocation"}</label>
-                <input type="date" value={newBillPayday} onChange={e => setNewBillPayday(e.target.value)} onBlur={e => { if (!isRealDate(e.target.value)) { alert("That date doesn't exist on the calendar! Please pick a valid date."); setNewBillPayday(""); } }} required style={{ width: "100%", padding: "10px", borderRadius: "5px", border: "1px solid #ccc" }} />
+                <select value={newBillAutoPayday ? "auto" : "manual"} onChange={e => setNewBillAutoPayday(e.target.value === "auto")} aria-label="How to pick the paycheck" style={{ width: "100%", padding: "10px", borderRadius: "5px", border: "1px solid #ccc", marginBottom: newBillAutoPayday ? 0 : "6px" }}>
+                    <option value="auto">🤖 Let the tracker decide</option>
+                    <option value="manual">✋ I'll pick the paycheck</option>
+                </select>
+                {newBillAutoPayday ? (
+                    <div style={{ fontSize: "12px", color: "#2563eb", marginTop: "4px" }}>
+                        {autoPayday(newBillDue) ? `→ ${formatDate(autoPayday(newBillDue)).replace(" BILLS", "")} paycheck` : "Picks the paycheck at least 11 days before the due date"}
+                    </div>
+                ) : (
+                    <input type="date" value={newBillPayday} onChange={e => setNewBillPayday(e.target.value)} onBlur={e => { if (!isRealDate(e.target.value)) { alert("That date doesn't exist on the calendar! Please pick a valid date."); setNewBillPayday(""); } }} required aria-label="Paycheck date" style={{ width: "100%", padding: "10px", borderRadius: "5px", border: "1px solid #ccc" }} />
+                )}
             </div>
             <div style={{ width: "100%", display: "flex", alignItems: "center", gap: "8px", marginTop: "5px" }}>
                 <input type="checkbox" id="recurringCheck" checked={newBillRecurring} onChange={e => { setNewBillRecurring(e.target.checked); if (!e.target.checked) setNewBillSplit(false); }} style={{ width: "18px", height: "18px", cursor: "pointer" }} />
@@ -540,6 +574,9 @@ export default function Budget() {
                             <div style={{ minWidth: 0 }}>
                                 <div style={{ fontWeight: "bold", color: "#1f2937" }}>{displayBillName(receipt.name)}</div>
                                 <div style={{ color: "#6b7280", fontSize: "13px" }}>Original Due: {formatReceiptDate(receipt.due_date)}</div>
+                                {receipt.paid_at && (
+                                    <div style={{ color: "#047857", fontSize: "13px" }}>✅ {receipt.from_account_id ? "Saved to fund" : "Settled"}: {formatSettled(receipt.paid_at)}</div>
+                                )}
                             </div>
                             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px", marginLeft: "auto" }}>
                                 <div style={{ fontWeight: "bold", color: "#10b981" }}>

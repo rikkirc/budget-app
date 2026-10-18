@@ -96,6 +96,9 @@ publishes it automatically every time `main` changes, using a key you create onc
 
 1. **Turn on Hosting.** In the Firebase console, left menu **Build → Hosting → Get started**. Click **Next** through
    the steps (you don't need to run the commands it shows) and **Continue to console**.
+   Then, on the Hosting page, scroll down and click **Add another site**, and name it `thevault-rc` (or your own
+   short name; it must be free across all of Firebase). The app is published to both addresses: the short one, and
+   the original `<your-project-id>.web.app`, which phones that installed it earlier keep using.
 2. **Create the deploy key.** Open https://console.cloud.google.com/iam-admin/serviceaccounts, sign in with the
    same Google account and pick your Firebase project at the top. Click **+ Create service account**, name it
    `github-deploy`, and click **Create and continue**. Add these three roles, then click **Done**:
@@ -106,9 +109,10 @@ publishes it automatically every time `main` changes, using a key you create onc
    secret**. Name: `FIREBASE_SERVICE_ACCOUNT`. Secret: open the `.json` file in a text editor and paste all of it.
    Click **Add secret**, then delete the downloaded file.
 5. **Publish.** **Actions → Web app → Run workflow**. When the run is green, the app is live at
-   `https://<your-project-id>.web.app` (for this repository, https://the-vault-1399a.web.app).
+   `https://thevault-rc.web.app` and `https://<your-project-id>.web.app`.
 
-If your project ID is different, change `projectId` in `.github/workflows/web.yml` to match. Until the secret
+If your project ID or short site name is different, change `projectId` in `.github/workflows/web.yml` and the
+`site` names in `firebase.json` to match. Until the secret
 exists, the workflow still builds the web app and attaches it to the run, and skips publishing with a note.
 
 ---
