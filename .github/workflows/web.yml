@@ -21,6 +21,7 @@ on:
       - "package-lock.json"
       - "firebase.json"
       - ".github/workflows/web.yml"
+      - "docs/Vault-User-Manual.pdf"
 
 # Publish one version at a time, in order
 concurrency:
