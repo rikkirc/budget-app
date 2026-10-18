@@ -2,19 +2,10 @@
 # Download it from the run's "Artifacts" section and run it; it upgrades the installed Vault and keeps your data.
 name: Windows app
 
-# Runs whenever the code it builds changes, on any branch, and on demand
+# Retired: the web app (web.yml) replaces this app, so it no longer builds on every change.
+# It can still be built by hand from Actions → Run workflow, should an old install ever need it.
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - "src/**"
-      - "src-tauri/**"
-      - "vault-core/**"
-      - "package.json"
-      - "package-lock.json"
-      - "index.html"
-      - "vite.config.js"
-      - ".github/workflows/windows.yml"
 
 jobs:
   installer:
