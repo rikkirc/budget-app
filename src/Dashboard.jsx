@@ -48,7 +48,7 @@ export default function Dashboard() {
 
   return (
     <div style={{ backgroundColor: "white", padding: "30px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}>
-      <h2 style={{ color: "#1e3a8a", marginTop: "0", fontSize: "32px" }}>Financial Command Center</h2>
+      <h2 style={{ color: "#1e3a8a", marginTop: "0", fontSize: "32px" }}>Dashboard</h2>
       <p style={{ color: "#6b7280", fontSize: "16px", marginBottom: "30px" }}>Welcome to your personal wealth dashboard.</p>
 
       {/* 📊 The Big Scoreboards */}

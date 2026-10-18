@@ -171,6 +171,8 @@ mod tests {
 
 fn builder<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     builder
+        // Opens links (like the PDF manual) in the computer's own browser
+        .plugin(tauri_plugin_opener::init())
         // Initialize the Receptionist memory with a blank slate!
         .manage(AppState { db_path: Mutex::new(None), is_replica: Mutex::new(false) })
         .invoke_handler(tauri::generate_handler![login_user, call, export_vault, open_replica, apply_ops, restore_replica])

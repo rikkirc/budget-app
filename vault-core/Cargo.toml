@@ -1,6 +1,6 @@
 [package]
 name = "vault-core"
-version = "0.2.0"
+version = "0.3.0"
 description = "Vault's business logic, shared by the desktop/mobile app and the sync server"
 authors = ["rikkirc"]
 edition = "2021"

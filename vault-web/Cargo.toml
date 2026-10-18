@@ -1,6 +1,6 @@
 [package]
 name = "vault-web"
-version = "0.2.0"
+version = "0.3.0"
 description = "Vault in the browser: vault-core compiled to WebAssembly for the web app (PWA)"
 authors = ["rikkirc"]
 edition = "2021"

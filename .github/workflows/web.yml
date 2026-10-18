@@ -1,4 +1,5 @@
-# Builds the web app (PWA) and publishes it to Firebase Hosting at https://the-vault-1399a.web.app
+# Builds the web app (PWA) and publishes it to Firebase Hosting at https://thevault-rc.web.app (and the original
+# address, https://the-vault-1399a.web.app, which phones that installed it earlier still use)
 # whenever main changes. Every phone that has it installed picks up the new version by itself.
 # Publishing needs the FIREBASE_SERVICE_ACCOUNT secret (docs/SYNC_AND_MOBILE.md, "Publish the web app"). Without it
 # the app is still built and attached to the run, and the publish step is skipped with a note.

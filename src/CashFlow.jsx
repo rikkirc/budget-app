@@ -132,7 +132,8 @@ export default function CashFlow() {
   };
 
   const handleTransaction = async () => {
-    if (!selectedAccountId || !amount || !description) return alert("Please fill all fields!");
+    // The description is optional
+    if (!selectedAccountId || !amount) return alert("Please choose an account and enter an amount!");
     const cleanAmount = parseFloat(amount.replace(/,/g, ""));
 
     let response;
@@ -228,7 +229,7 @@ export default function CashFlow() {
              )}
 
              <input type="text" placeholder="Amount (₱)" value={amount} onChange={e => formatMoneyInput(e.target.value, setAmount)} style={{ padding: "10px", borderRadius: "5px", border: "1px solid #ccc", width: "150px" }} />
-             <input type="text" placeholder="Description (e.g. Salary, Groceries)" value={description} onChange={e => setDescription(e.target.value)} style={{ padding: "10px", borderRadius: "5px", border: "1px solid #ccc", flex: 1, minWidth: "200px" }} />
+             <input type="text" placeholder="Description (optional, e.g. Salary)" value={description} onChange={e => setDescription(e.target.value)} style={{ padding: "10px", borderRadius: "5px", border: "1px solid #ccc", flex: 1, minWidth: "200px" }} />
              
              <button onClick={handleTransaction} style={{ padding: "10px 20px", backgroundColor: "#1e3a8a", color: "white", border: "none", borderRadius: "5px", fontWeight: "bold", cursor: "pointer" }}>Save</button>
          </div>

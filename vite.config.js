@@ -2,6 +2,16 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
+
+// The web app offers the User's Manual for download (from its welcome screen), straight from docs/
+const userManual = () => ({
+  name: "vault-user-manual",
+  apply: "build",
+  generateBundle() {
+    this.emitFile({ type: "asset", fileName: "The-Vault-User-Manual.pdf", source: readFileSync(new URL("./docs/Vault-User-Manual.pdf", import.meta.url)) });
+  },
+});
 
 // Set by `tauri android dev` / `tauri ios dev` so a real phone on your Wi-Fi can load the dev server
 const host = process.env.TAURI_DEV_HOST;
@@ -11,6 +21,7 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
+    mode === "web" && userManual(),
     // Makes the web app installable (home-screen icon, full screen) and lets it open offline. Only in the web build:
     // the desktop and Android apps never get a service worker.
     VitePWA({
@@ -18,8 +29,8 @@ export default defineConfig(({ mode }) => ({
       registerType: "prompt", // a new version waits until the user taps Reload (src/UpdateBanner.jsx)
       injectRegister: false,
       manifest: {
-        name: "Vault — Financial Command Center",
-        short_name: "Vault",
+        name: "The Vault — by RCbreezy",
+        short_name: "The Vault",
         description: "Plan every bill against the paycheck that pays it, synced across your family's devices.",
         start_url: "/",
         scope: "/",

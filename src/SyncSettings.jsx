@@ -9,6 +9,7 @@ export default function SyncSettings({ account, profileName, beforeSignOut, onDo
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [inviteCode, setInviteCode] = useState("");
+  const [remember, setRemember] = useState(true); // stay signed in after the app is closed
   const [busy, setBusy] = useState(false);
 
   const message = (e) => e?.message ?? String(e);
@@ -42,8 +43,8 @@ export default function SyncSettings({ account, profileName, beforeSignOut, onDo
       setMode("signin");
       return;
     }
-    if (mode === "signup") await signUp(email, password, inviteCode);
-    else await signIn(email, password);
+    if (mode === "signup") await signUp(email, password, inviteCode, remember);
+    else await signIn(email, password, remember);
     setPassword("");
     await offerUpload();
     onDone();
@@ -90,14 +91,16 @@ export default function SyncSettings({ account, profileName, beforeSignOut, onDo
       <div style={card}>
         <h2 style={{ color: "#1e3a8a", margin: "0 0 10px 0" }}>🔑 Change password</h2>
         <p style={{ color: "#6b7280", marginTop: 0, lineHeight: 1.5 }}>Your other devices will be signed out and need the new password. Do this if you lose a phone.</p>
+        <form onSubmit={e => { e.preventDefault(); doChangePassword(); }}>
         <label style={labelStyle}>Current password</label>
         <input type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} style={inputStyle} />
         <label style={labelStyle}>New password (at least 8 characters)</label>
         <input type="password" autoComplete="new-password" value={newPassword} onChange={e => setNewPassword(e.target.value)} style={inputStyle} />
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-          <button onClick={doChangePassword} disabled={busy} style={primary}>{busy ? "Please wait…" : "Change password"}</button>
-          <button onClick={() => setMode("signin")} disabled={busy} style={secondary}>Back</button>
+          <button type="submit" disabled={busy} style={primary}>{busy ? "Please wait…" : "Change password"}</button>
+          <button type="button" onClick={() => setMode("signin")} disabled={busy} style={secondary}>Back</button>
         </div>
+        </form>
       </div>
     );
   }
@@ -128,6 +131,8 @@ export default function SyncSettings({ account, profileName, beforeSignOut, onDo
       </p>
       {!SYNC_ONLY && !profileName && mode !== "reset" && <p style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a", padding: "10px", borderRadius: "5px", color: "#92400e", fontSize: "14px", lineHeight: 1.5 }}>💡 Already using Vault on this computer? Unlock your vault first, then sign in from the top bar, so your data is uploaded for your phone.</p>}
 
+      {/* A real form, so pressing Enter in any field signs in */}
+      <form onSubmit={e => { e.preventDefault(); submit(); }}>
       <label style={labelStyle}>Email</label>
       <input type="email" autoCapitalize="off" autoCorrect="off" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} />
       {mode !== "reset" && <>
@@ -139,10 +144,17 @@ export default function SyncSettings({ account, profileName, beforeSignOut, onDo
         <input type="text" autoCapitalize="off" autoCorrect="off" placeholder="Ask whoever set up Vault's sync" value={inviteCode} onChange={e => setInviteCode(e.target.value)} style={inputStyle} />
       </>}
 
+      {mode !== "reset" && (
+        <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", color: "#374151", marginBottom: "15px", cursor: "pointer" }}>
+          <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} style={{ width: "18px", height: "18px" }} />
+          Keep me signed in on this device
+        </label>
+      )}
       <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-        <button onClick={submit} disabled={busy} style={primary}>{busy ? "Please wait…" : mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Email me a reset link"}</button>
-        {onCancel && <button onClick={onCancel} disabled={busy} style={secondary}>Cancel</button>}
+        <button type="submit" disabled={busy} style={primary}>{busy ? "Please wait…" : mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Email me a reset link"}</button>
+        {onCancel && <button type="button" onClick={onCancel} disabled={busy} style={secondary}>Cancel</button>}
       </div>
+      </form>
       <p style={{ marginBottom: 0, fontSize: "14px", color: "#6b7280", display: "flex", gap: "15px", flexWrap: "wrap" }}>
         {mode !== "signin" && <button onClick={() => setMode("signin")} style={link}>I already have an account</button>}
         {mode !== "signup" && <button onClick={() => setMode("signup")} style={link}>Create an account</button>}
