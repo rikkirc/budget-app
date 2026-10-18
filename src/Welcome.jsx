@@ -32,13 +32,13 @@ export default function Welcome({ onProceed }) {
         </div>
 
         <p style={{ color: "#374151", lineHeight: 1.6, marginTop: "20px" }}>
-          A budgeting app for people paid twice a month. The Vault plans every bill and loan payment against the paycheck
+          A budgeting app for ordinary paycheck to paycheck people. The Vault plans every bill and loan payment against the paycheck
           that will cover it, tracks the money in each of your accounts, and keeps your phone and computer in step.
         </p>
 
         <h3 style={h3}>How to get started</h3>
         <ol style={{ color: "#374151", lineHeight: 1.6, paddingLeft: "22px", margin: 0 }}>
-          <li>{SYNC_ONLY ? "Sign in to your family account, or create one with the family invite code." : "Unlock a profile on this computer, or sign in to your family account to sync with your phone."}</li>
+          <li>{SYNC_ONLY ? "Sign in with your email, or create an account with the invite code." : "Unlock a profile on this computer, or sign in to your family account to sync with your phone."}</li>
           <li>Open a <b>profile</b>. One account can hold several profiles, each a separate budget (for example "Personal" and "Household").</li>
           <li>Add your money accounts (GCash, BPI, cash…) in <b>💰 Cash Flow</b>.</li>
           <li>Log your bills in <b>📅 Bi-Monthly Budget</b> and your loans in <b>📉 Loan Generator</b>. Each lands on the paycheck that pays it.</li>
