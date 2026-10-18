@@ -1,4 +1,5 @@
 // The one door every screen uses to reach the vault.
+//   Trying the demo (web app): commands run on a made-up vault in this browser tab only (src/sync/demo.js).
 //   Not signed in ("This computer only"): commands run on the local vault through the Rust backend.
 //   Signed in to a family account: commands run on this device's synced copy of the vault; changes go through
 //   Firebase first so every phone and computer stays identical (see src/sync/engine.js).
@@ -12,7 +13,8 @@ import { createSyncEngine, uploadVault } from "./sync/engine";
 import { firestoreRemote } from "./sync/firestoreRemote";
 // This device's copy of a synced vault: run by the Rust backend in the desktop and Android apps, or by vault-core
 // compiled to WebAssembly in the web app. vite.config.js picks the right one for each build.
-import { deviceReplica } from "@device-replica";
+import { deviceReplica, demoReplica } from "@device-replica";
+import { DEMO_PROFILE, openDemoVault } from "./sync/demo";
 import { bridgeReplica } from "./sync/bridgeReplica";
 import { fromBase64 } from "./sync/base64";
 
@@ -49,6 +51,7 @@ function services() {
 let user = null;     // the signed-in family account, or null
 let joining = null;  // a sign-up still saving its family membership
 let engine = null;   // the synced vault that is open, if any
+let demo = null;     // the demo vault, while trying the demo
 const watchers = new Set();
 
 /** Calls back with { email } or null now and whenever the sign-in changes (also when a session ends elsewhere) */
@@ -106,8 +109,29 @@ async function openSyncedVault(profile) {
     : `SUCCESS: Logged in as ${profile}`;
 }
 
+/** Whether this app offers "Try the demo" (the web app does) */
+export const DEMO_AVAILABLE = !!demoReplica;
+
+/** Opens a fresh demo vault: no account, nothing sent to Firebase, nothing saved. Returns its profile name. */
+export async function startDemo() {
+  demo = null;
+  demo = await openDemoVault(demoReplica());
+  return DEMO_PROFILE;
+}
+/** Throws the demo vault away */
+export function endDemo() {
+  demo?.close();
+  demo = null;
+}
+/** Whether commands currently go to the demo vault */
+export const isDemo = () => !!demo;
+
 /** Drop-in replacement for Tauri's invoke(): same command names, same camelCase arguments, same results */
 export async function invoke(cmd, args = {}) {
+  if (demo) {
+    if (cmd === "login_user") return `SUCCESS: Logged in as ${DEMO_PROFILE}`;
+    return demo.call(cmd, args);
+  }
   if (!user) {
     if (SYNC_ONLY) throw "ERROR: Please sign in to your family account first.";
     if (cmd === "login_user") return tauriInvoke("login_user", args);

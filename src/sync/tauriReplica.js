@@ -14,3 +14,6 @@ export function tauriReplica(uid, profile) {
 
 // The name src/api.js imports, whichever replica this build uses (see vite.config.js)
 export const deviceReplica = tauriReplica;
+
+// "Try the demo" is only in the web app (src/sync/webReplica.js)
+export const demoReplica = null;

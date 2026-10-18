@@ -7,8 +7,9 @@ import { termsAccepted, acceptTerms } from "./preferences";
 const MANUAL_URL = "https://thevault-rc.web.app/The-Vault-User-Manual.pdf";
 const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
-// Shown before signing in or unlocking: what The Vault is, how to start, the manual, and the Terms & Privacy Notice
-export default function Welcome({ onProceed }) {
+// Shown before signing in or unlocking: what The Vault is, how to start, the manual, and the Terms & Privacy Notice.
+// onTryDemo (web app only) opens a made-up vault without an account.
+export default function Welcome({ onProceed, onTryDemo }) {
   const alreadyAccepted = termsAccepted();
   const [agreed, setAgreed] = useState(alreadyAccepted);
   const [showTerms, setShowTerms] = useState(!alreadyAccepted);
@@ -79,6 +80,14 @@ export default function Welcome({ onProceed }) {
         <button onClick={proceed} disabled={!agreed} style={{ marginTop: "22px", width: "100%", padding: "14px", backgroundColor: agreed ? "#1e3a8a" : "#9ca3af", color: "white", border: "none", borderRadius: "6px", cursor: agreed ? "pointer" : "not-allowed", fontWeight: "bold", fontSize: "17px" }}>
           Proceed →
         </button>
+        {onTryDemo && (
+          <div style={{ marginTop: "14px", textAlign: "center" }}>
+            <button onClick={onTryDemo} style={{ width: "100%", padding: "12px", backgroundColor: "white", color: "#1e3a8a", border: "2px solid #1e3a8a", borderRadius: "6px", cursor: "pointer", fontWeight: "bold", fontSize: "16px" }}>
+              👀 Try the demo (no account needed)
+            </button>
+            <div style={{ fontSize: "13px", color: "#6b7280", marginTop: "6px" }}>A made-up vault in this browser only. Nothing is saved or sent anywhere.</div>
+          </div>
+        )}
       </div>
     </div>
   );

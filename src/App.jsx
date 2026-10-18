@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { displayBillName } from "./billNames";
-import { invoke, SYNC_ONLY, SYNC_AVAILABLE, isSignedIn, onAccountChange, subscribeToChanges } from "./api";
+import { invoke, SYNC_ONLY, SYNC_AVAILABLE, DEMO_AVAILABLE, isSignedIn, onAccountChange, subscribeToChanges, startDemo, endDemo } from "./api";
 import Dashboard from "./Dashboard";
 import Budget from "./Budget";
 import Debt from "./Debt";
@@ -39,11 +39,15 @@ export default function App() {
   const [rememberMe, setRememberMe] = useState(true);
   const [autoOpening, setAutoOpening] = useState(null); // the profile being opened automatically
   const autoTried = useRef(new Set());
+  // "Try the demo": a made-up vault in this browser only. A link ending in ?demo opens it straight away.
+  const [demo, setDemo] = useState(false);
+  const [startingDemo, setStartingDemo] = useState(false);
+  const demoLink = useRef(DEMO_AVAILABLE && new URLSearchParams(window.location.search).has("demo"));
 
   // Real-time sync: when the phone (or desktop) changes something, every open screen here reloads its data.
   // If you're in the middle of typing, it waits and offers a Refresh instead, so your half-filled form isn't wiped.
   useEffect(() => {
-    if (!isLoggedIn || !sync) return;
+    if (!isLoggedIn || !sync || demo) return;
     return subscribeToChanges(profileName, {
       onStatus: setLiveLink,
       onChange: () => {
@@ -52,7 +56,7 @@ export default function App() {
         else setRefreshKey(prev => prev + 1);
       },
     });
-  }, [isLoggedIn, sync, profileName]);
+  }, [isLoggedIn, sync, profileName, demo]);
 
   // Follow the sign-in. If it ends without you signing out here (the password was changed on another device),
   // lock the vault and ask to sign in again rather than quietly switching to other data.
@@ -113,12 +117,44 @@ export default function App() {
     const key = account?.email ?? "(this computer)";
     if (autoTried.current.has(key)) return;
     autoTried.current.add(key);
+    if (demoLink.current) return; // a demo link opens the demo instead
     const saved = rememberedProfile(account?.email);
     if (!saved) return;
     setAutoOpening(saved);
     setProfileName(saved);
     handleLogin(saved, { auto: true }).finally(() => setAutoOpening(null));
   }, [account, isLoggedIn]);
+
+  const tryDemo = async () => {
+    setStartingDemo(true);
+    try {
+      const name = await startDemo();
+      unlockedSynced.current = false;
+      setDemo(true);
+      setProfileName(name);
+      setActiveTab("Dashboard");
+      setIsLoggedIn(true);
+      await checkUpcomingRecurringBills();
+    } catch (e) {
+      alert(`The demo couldn't open: ${e?.message ?? e}`);
+    } finally {
+      setStartingDemo(false);
+    }
+  };
+
+  // Leaving the demo throws its vault away and goes back to the welcome screen
+  const exitDemo = () => {
+    endDemo();
+    demoLink.current = false;
+    if (window.location.search) window.history.replaceState(null, "", window.location.pathname);
+    setDemo(false);
+    setIsLoggedIn(false);
+    setProfileName("");
+    setActiveTab("Dashboard");
+    setWelcomeDone(false);
+  };
+
+  useEffect(() => { if (demoLink.current) tryDemo(); }, []);
 
   const checkUpcomingRecurringBills = async () => {
     try {
@@ -150,6 +186,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    if (demo) { exitDemo(); return; }
     if (window.confirm("Are you sure you want to lock the vault and log out?")) {
       // Logging out on purpose means: don't open this profile by itself next time
       forgetProfile();
@@ -163,11 +200,15 @@ export default function App() {
     return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", backgroundColor: "#f3f4f6", color: "#6b7280" }}>Opening The Vault…</div>;
   }
 
+  if (startingDemo && !isLoggedIn) {
+    return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", backgroundColor: "#f3f4f6", color: "#6b7280" }}>Opening the demo…</div>;
+  }
+
   if (autoOpening && !isLoggedIn) {
     return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", backgroundColor: "#f3f4f6", color: "#6b7280" }}>Opening {autoOpening}…</div>;
   }
 
-  if (!isLoggedIn && !welcomeDone) return <Welcome onProceed={() => setWelcomeDone(true)} />;
+  if (!isLoggedIn && !welcomeDone) return <Welcome onProceed={() => setWelcomeDone(true)} onTryDemo={DEMO_AVAILABLE ? tryDemo : null} />;
 
   // The phone and web apps always work through a family account, so they must be signed in before the first unlock
   if (!isLoggedIn && (showSync || (SYNC_ONLY && !sync))) {
@@ -244,7 +285,7 @@ export default function App() {
           <span style={{ fontSize: "16px", fontWeight: "bold", color: "#1f2937", backgroundColor: "#f3f4f6", padding: "10px 15px", borderRadius: "5px", border: "1px solid #d1d5db" }}>
             👤 Vault: {profileName}
           </span>
-          {SYNC_AVAILABLE && (
+          {SYNC_AVAILABLE && !demo && (
             <button onClick={() => setShowSync(true)} title={sync ? `Signed in as ${sync.email}` : "Sign in to sync with your phone"} style={{ padding: "10px 15px", cursor: "pointer", fontWeight: "bold", fontSize: "14px", backgroundColor: !sync ? "#f3f4f6" : liveLink ? "#ecfdf5" : "#fff7ed", color: !sync ? "#374151" : liveLink ? "#047857" : "#c2410c", border: "1px solid #d1d5db", borderRadius: "5px" }}>
               {!sync ? "💻 Local only" : liveLink ? "🟢 Live sync" : "🟠 Reconnecting…"}
             </button>
@@ -253,7 +294,7 @@ export default function App() {
             🔄 Refresh
           </button>
           <button onClick={handleLogout} style={{ padding: "12px 24px", cursor: "pointer", fontWeight: "bold", fontSize: "16px", backgroundColor: "#dc2626", color: "white", border: "none", borderRadius: "5px", transition: "0.2s" }}>
-            🔒 Log Out
+            {demo ? "🚪 Exit Demo" : "🔒 Log Out"}
           </button>
         </div>
 
@@ -264,6 +305,15 @@ export default function App() {
           <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: "460px" }}>
             <SyncSettings account={account} profileName={profileName} beforeSignOut={() => { signingOut.current = true; }} onDone={handleSyncChanged} onCancel={() => setShowSync(false)} />
           </div>
+        </div>
+      )}
+
+      {demo && (
+        <div className="demo-banner" role="status" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "10px", marginBottom: "20px", padding: "12px 15px", backgroundColor: "#fffbeb", border: "1px solid #fcd34d", borderRadius: "8px", color: "#92400e" }}>
+          <span><b>🧪 Demo:</b> nothing here is saved. Create an account to use your own vault.</span>
+          <button onClick={exitDemo} style={{ padding: "8px 14px", backgroundColor: "#1e3a8a", color: "white", border: "none", borderRadius: "5px", cursor: "pointer", fontWeight: "bold", fontSize: "14px" }}>
+            ← Back to the welcome screen
+          </button>
         </div>
       )}
 
