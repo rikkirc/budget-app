@@ -10,12 +10,16 @@ import { firebaseConfig, isFirebaseConfigured } from "./firebaseConfig";
 import * as account from "./sync/account";
 import { createSyncEngine, uploadVault } from "./sync/engine";
 import { firestoreRemote } from "./sync/firestoreRemote";
-import { tauriReplica } from "./sync/tauriReplica";
+// This device's copy of a synced vault: run by the Rust backend in the desktop and Android apps, or by vault-core
+// compiled to WebAssembly in the web app. vite.config.js picks the right one for each build.
+import { deviceReplica } from "@device-replica";
 import { bridgeReplica } from "./sync/bridgeReplica";
 import { fromBase64 } from "./sync/base64";
 
-// The phone app has no local vault: it always works through a family account
-export const IS_MOBILE = ["android", "ios"].includes(import.meta.env.TAURI_ENV_PLATFORM);
+/** The web app (PWA), built with `npm run build:web` */
+export const IS_WEB = import.meta.env.MODE === "web";
+// The phone and web apps have no local vault: they always work through a family account
+export const SYNC_ONLY = IS_WEB || ["android", "ios"].includes(import.meta.env.TAURI_ENV_PLATFORM);
 
 // For automated tests only: the Firebase emulators, and a replica served over HTTP instead of by Tauri
 const USE_EMULATOR = import.meta.env.VITE_FIREBASE_EMULATOR === "1";
@@ -72,7 +76,7 @@ export async function signOut() {
 async function openSyncedVault(profile) {
   const key = account.vaultKey(profile);
   engine?.close();
-  const replica = REPLICA_BRIDGE ? bridgeReplica(REPLICA_BRIDGE, CLIENT_ID, user.uid, key) : tauriReplica(user.uid, profile);
+  const replica = REPLICA_BRIDGE ? bridgeReplica(REPLICA_BRIDGE, CLIENT_ID, user.uid, key) : deviceReplica(user.uid, profile);
   engine = createSyncEngine({
     remote: firestoreRemote(services().db, user.uid, key),
     replica,
@@ -89,6 +93,7 @@ async function openSyncedVault(profile) {
 /** Drop-in replacement for Tauri's invoke(): same command names, same camelCase arguments, same results */
 export async function invoke(cmd, args = {}) {
   if (!user) {
+    if (SYNC_ONLY) throw "ERROR: Please sign in to your family account first.";
     if (cmd === "login_user") return tauriInvoke("login_user", args);
     return tauriInvoke("call", { cmd, args });
   }

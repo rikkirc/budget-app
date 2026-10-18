@@ -11,3 +11,6 @@ export function tauriReplica(uid, profile) {
     restore: (bytes, seq) => invoke("restore_replica", { checkpoint: toBase64(bytes), seq }),
   };
 }
+
+// The name src/api.js imports, whichever replica this build uses (see vite.config.js)
+export const deviceReplica = tauriReplica;
