@@ -6,26 +6,26 @@ A budgeting app for ordinary paycheck to paycheck people: an installable web app
 
 The earlier Windows (`.exe`) and Android (`.apk`) apps, built with [Tauri](https://tauri.app/), are retired: their code is still here, but they're no longer built or updated.
 
-▶️ **[Watch the sync demo](https://drive.google.com/file/d/1LszPGQpBaUTLtbLXiTfI56x02FueR9nd/view)**: a bill paid on the phone shows up on the desktop within a second.
+▶️ **[Watch the sync demo](https://drive.google.com/file/d/1LszPGQpBaUTLtbLXiTfI56x02FueR9nd/view)** (recorded with the earlier desktop and Android apps): a bill paid on the phone shows up on the desktop within a second.
 
 📄 **[Read the case study](docs/CASE_STUDY.md)**: why I built it, how sync avoids recording a payment twice, and what I'd do differently.
 
 ## Screenshots
 
-The same demo vault on the desktop and on an Android phone, kept in step by live sync.
+The demo vault on a computer and on a phone.
 
 <p>
-  <img src="docs/screenshots/desktop-dashboard.png" alt="Desktop dashboard showing total cash, total debt, and the next 5 upcoming bills" width="640">
-  <img src="docs/screenshots/phone-dashboard.jpg" alt="The same dashboard on an Android phone" width="200">
+  <img src="docs/screenshots/desktop-dashboard.png" alt="Dashboard on a computer: total cash, total debt, the next 5 upcoming bills, and the budget and loan summaries" width="640">
+  <img src="docs/screenshots/phone-dashboard.png" alt="The same Dashboard on a phone" width="200">
 </p>
 
-<img src="docs/screenshots/desktop-budget-summary.png" alt="Bi-Monthly Budget summary: each bill with its due date, amount, and the paycheck that pays it" width="720">
+<img src="docs/screenshots/desktop-budget.png" alt="Bi-Monthly Budget on the October 31 paycheck tab: an Appliance Loan 2nd Half and the Internet bill, still TBD" width="720">
 
-*Bi-Monthly Budget: every bill is assigned to the paycheck that will cover it. Electricity is still TBD, so it's flagged until the amount comes in.*
+*Bi-Monthly Budget: every bill is assigned to the paycheck that will cover it. Internet is still TBD, so it's flagged until the amount comes in.*
 
 <img src="docs/screenshots/desktop-loan.png" alt="Loan Generator: a 12-month loan with its full bi-monthly payment schedule" width="480">
 
-*Loan Generator: a ₱10,000 loan turned into a 24-payment bi-monthly schedule, each payment assigned to a paycheck.*
+*Loan Generator: a ₱12,000 loan turned into a 24-payment bi-monthly schedule, each payment assigned to a paycheck.*
 
 ## Features
 
