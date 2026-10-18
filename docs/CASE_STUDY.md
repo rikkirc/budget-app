@@ -1,6 +1,6 @@
 # Case study: Vault, a budget app that runs on payday
 
-**Built by:** Rikki Cabanlet · **Built with:** AI-assisted coding (Claude) in VS Code · **Stack:** React, Rust, SQLite, WebAssembly, IndexedDB, Firebase (Firestore, Auth, Hosting), Tauri · **Time:** about a week, 26 pull requests
+**Built by:** Rikki Cabanlet · **Built with:** AI-assisted coding (Claude) in VS Code · **Stack:** React, Rust, SQLite, WebAssembly, IndexedDB, Firebase (Firestore, Auth, Hosting), Tauri · **Time:** about a week, 27 pull requests
 
 ## The problem
 
@@ -8,7 +8,7 @@ Most budgeting apps think in calendar months. Many Filipino workers, especially 
 
 ## What I built
 
-An app where every bill is assigned to the paycheck that will pay it. It started as a Windows and Android app and is now a web app that installs on iPhone, Android and computers. Each paycheck gets its own tab with its own total. Bills whose amount isn't known yet, like electricity, are flagged as TBD so they aren't forgotten. A loan generator turns a loan into a full bi-monthly payment schedule and drops each payment into the right paycheck.
+An app where every bill is assigned to the paycheck that will pay it. It started as a Windows and Android app (last builds archived in [release v0.3.0](https://github.com/rikkirc/budget-app/releases/tag/v0.3.0)) and is now a web app that installs on iPhone, Android and computers. Each paycheck gets its own tab with its own total. Bills whose amount isn't known yet, like electricity, are flagged as TBD so they aren't forgotten. A loan generator turns a loan into a full bi-monthly payment schedule and drops each payment into the right paycheck.
 
 ## The hard part: syncing money safely
 

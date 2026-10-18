@@ -13,6 +13,18 @@ What's done, what's next, and what's blocked. Newest entries first.
 
 ## Log
 
+### 2026-10-19 — #27
+- Manual: new "Try the demo first" section and a glossary entry; PDF rebuilt (27 pages), served by the app's download button.
+
+### 2026-10-19 — #26
+- **Try the demo:** a button on the welcome screen or a `?demo` link opens a made-up vault dated around today (four accounts, salary and spending, five bills with one TBD, a split loan, three receipts). No account or invite code; it lives in the browser tab only and is never saved or sent to Firebase. A yellow banner says so, with a way back. It runs on the real engine.
+- Docs: live and demo links at the top of the README; PROGRESS current state (v0.3.0) and log for #20–#24; case study updated (stack, results, one Rust engine natively and in the browser).
+- App tests up from 19 to 27 (loan schedules and the demo, including month ends, Feb 29 and Dec 31). Checked in a real browser at desktop and iPhone sizes, including that nothing is stored and no Firebase database or sign-in requests are made.
+
+### 2026-10-19 — #25
+- Retired the Windows and Android apps: the `.exe` and `.apk` no longer build in CI. Their code is kept and can still be built by hand. The last builds are archived as release [v0.3.0](https://github.com/rikkirc/budget-app/releases/tag/v0.3.0).
+- The manual covers only the web app, with a section on moving from the old apps (Android users are already synced and just sign in; Windows "Local only" users upload their data once before uninstalling).
+
 ### 2026-10-18 (night) — #24
 - The manual's opening line matches the welcome screen ("A budgeting app for ordinary paycheck to paycheck people"), and the PDF is rebuilt.
 - The website now republishes when only the manual PDF changes, so the welcome screen's download is never out of date.
@@ -77,7 +89,11 @@ What's done, what's next, and what's blocked. Newest entries first.
 - [x] Desktop: bright near-white and mint boxes (account cards, Add New Account, bill rows, Log a New Loan) now use the calmer grey of the Log Transaction box.
 - [x] Deleting a loan removed other loans' payments when one name started with the other. Now it removes only its own payments.
 
-### Next up
+### Next up (web app)
+- [ ] Replace the README screenshots: they still show the retired Windows and Android apps. Take new ones from the demo (https://thevault-rc.web.app/?demo) on a phone and a computer.
+- [ ] Re-record the sync demo video with the web app, or label the current one as the earlier desktop/Android version.
+
+### Earlier (desktop and Android)
 - [x] Test the edit buttons on a real PC and phone.
 - Skipped: renaming "Demo Loan sinking Fund" in the demo vault and retaking the loan screenshot (minor detail).
 - [x] Decide whether the green "Total Liquid Cash" and Completed Loans cards should be toned down too.
