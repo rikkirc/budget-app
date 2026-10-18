@@ -67,6 +67,16 @@ The first screen asks you to sign in or create your account ([section 3](#3-your
 > [!NOTE]
 > Older copies may still use the original link, `https://the-vault-1399a.web.app`. It shows the same app and keeps working, so there's no need to reinstall.
 
+### Try the demo first
+
+Want to look around before creating an account? On the welcome screen, tap **👀 Try the demo (no account needed)**, or open **https://thevault-rc.web.app/?demo**. You don't need an account, an invite code or the terms.
+
+The demo opens a made-up vault, dated around today: four accounts (Payroll Account, GCash, Cash Wallet and Sinking Fund Savings), a salary and some spending, five bills, a split loan paid twice a month, and three receipts. **Electricity** is still TBD and due soon, so the reminder to enter its amount appears as soon as the demo opens.
+
+Everything works as in a real vault: pay bills, log transactions, add loans, undo. But **nothing is saved**: the demo lives only in that browser tab, and nothing is sent to your account or to Firebase. A yellow banner reminds you: **"Demo: nothing here is saved. Create an account to use your own vault."**
+
+To leave, tap **← Back to the welcome screen** (or **🚪 Exit Demo** in the top bar). The demo is thrown away, and the next one starts fresh. To start your own vault, tick the terms and tap **Proceed →** to create your account ([section 3](#3-your-account--sync)).
+
 ### Updating
 
 The web app updates itself. When a bar says **A new version of Vault is ready**, tap **Reload**. Tap **Later** to finish what you're doing first.
@@ -98,7 +108,7 @@ Once your data shows in the web app, uninstall the old app: **Start → Settings
 
 ### The welcome screen
 
-Whenever The Vault opens to the sign-in or unlock screen, it first shows a short welcome: what the app is for, how to get started, a **📄 Download the User's Manual (PDF)** button, and the **Terms & Privacy Notice**. The first time, tick **I have read and agree to the Terms & Privacy Notice**, then tap **Proceed →**. After that, the welcome only needs **Proceed →**, and **Read it again** shows the terms.
+Whenever The Vault opens to the sign-in or unlock screen, it first shows a short welcome: what the app is for, how to get started, a **📄 Download the User's Manual (PDF)** button, the **Terms & Privacy Notice**, and **👀 Try the demo (no account needed)** ([Try the demo first](#try-the-demo-first)). The first time, tick **I have read and agree to the Terms & Privacy Notice**, then tap **Proceed →**. After that, the welcome only needs **Proceed →**, and **Read it again** shows the terms.
 
 ### Accounts and profiles
 
@@ -631,6 +641,7 @@ Those apps are retired and no longer updated. Switch to the web app ([section 1]
 | **Local only** | The retired Windows app, used without signing in; its data stays on that computer until uploaded. |
 | **Upload** | Copying the retired Windows app's vault into your account, the first time you sign in there. |
 | **Firebase** | Google's free service that stores your vaults, passes changes between your devices, and hosts the web app. |
+| **Demo** | A made-up vault for trying The Vault without an account. It lives only in the browser tab and is never saved. |
 | **Web app** | The Vault itself: an app that runs in your browser and installs from it, at **https://thevault-rc.web.app**. |
 
 ---
