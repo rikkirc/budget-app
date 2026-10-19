@@ -44,8 +44,9 @@ export default defineConfig(({ mode }) => ({
         ],
       },
       workbox: {
-        // Everything the app needs to open with no connection, including vault-core's WebAssembly (about 1.4 MB)
-        globPatterns: ["**/*.{js,css,html,wasm,svg,png}"],
+        // Everything the app needs to open with no connection, including vault-core's WebAssembly (about 1.4 MB) and
+        // the User's Manual (about 1 MB), so the manual downloads even offline
+        globPatterns: ["**/*.{js,css,html,wasm,svg,png,pdf}"],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/__\//],

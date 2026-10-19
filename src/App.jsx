@@ -8,6 +8,7 @@ import CashFlow from "./CashFlow";
 import Search from "./Search";
 import SyncSettings from "./SyncSettings";
 import Welcome from "./Welcome";
+import ManualLink from "./ManualLink";
 import { rememberedProfile, rememberProfile, forgetProfile } from "./preferences";
 
 // "Sat, Oct 18, 2026 · 9:41 PM", kept current while the app is open
@@ -213,8 +214,9 @@ export default function App() {
   // The phone and web apps always work through a family account, so they must be signed in before the first unlock
   if (!isLoggedIn && (showSync || (SYNC_ONLY && !sync))) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", backgroundColor: "#f3f4f6", padding: "20px", boxSizing: "border-box" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px", minHeight: "100vh", backgroundColor: "#f3f4f6", padding: "20px", boxSizing: "border-box" }}>
         <SyncSettings account={account} profileName="" beforeSignOut={() => { signingOut.current = true; }} onDone={handleSyncChanged} onCancel={sync || !SYNC_ONLY ? () => setShowSync(false) : null} />
+        <ManualLink style={screenManualLink} />
       </div>
     );
   }
@@ -248,8 +250,9 @@ export default function App() {
             🔐 Unlock Vault
           </button>
           </form>
+          <p style={{ marginTop: "20px", marginBottom: 0 }}><ManualLink style={{ color: "#2563eb", fontSize: "14px", textDecoration: "underline", background: "none", border: "none", padding: 0, cursor: "pointer" }} /></p>
           {SYNC_AVAILABLE && (
-            <p style={{ color: "#6b7280", fontSize: "14px", marginTop: "25px", marginBottom: 0 }}>
+            <p style={{ color: "#6b7280", fontSize: "14px", marginTop: "12px", marginBottom: 0 }}>
               {sync ? `☁️ Signed in as ${sync.email}` : SYNC_ONLY ? "" : "💻 This computer only"}
               {" · "}
               <button onClick={() => setShowSync(true)} style={{ background: "none", border: "none", color: "#2563eb", cursor: "pointer", fontSize: "14px", padding: 0, textDecoration: "underline" }}>{sync ? "Account" : "Sign in to sync"}</button>
@@ -290,6 +293,7 @@ export default function App() {
               {!sync ? "💻 Local only" : liveLink ? "🟢 Live sync" : "🟠 Reconnecting…"}
             </button>
           )}
+          <ManualLink style={{ padding: "10px 15px", fontWeight: "bold", fontSize: "14px", backgroundColor: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe", borderRadius: "5px", cursor: "pointer" }}>📄 Manual</ManualLink>
           <button onClick={refresh} style={{ padding: "12px 24px", cursor: "pointer", fontWeight: "bold", fontSize: "16px", backgroundColor: "#0891b2", color: "white", border: "none", borderRadius: "5px", transition: "0.2s" }}>
             🔄 Refresh
           </button>
@@ -334,3 +338,6 @@ export default function App() {
     </div>
   );
 }
+
+// The manual link under the sign-in card
+const screenManualLink = { color: "#2563eb", fontSize: "14px", textDecoration: "underline" };

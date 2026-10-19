@@ -6,7 +6,7 @@
 
 **The Vault** ("Vault" for short) is a budgeting app for ordinary paycheck to paycheck people. It plans every bill and loan installment against the paycheck that will cover it and tracks the money in each of your accounts. Use it on your phone, on your computer, or both: sign in to your free account and every change you make on one device appears on the other within seconds.
 
-This manual covers the app from installation to everyday use. A print-ready version is in [Vault-User-Manual.pdf](Vault-User-Manual.pdf), and you can also download it from the app's welcome screen.
+This manual covers the app from installation to everyday use. A print-ready version is in [Vault-User-Manual.pdf](Vault-User-Manual.pdf). In the app, download it any time from **📄 Manual** in the top bar, or from the welcome, sign-in and unlock screens. It's kept on your device, so it downloads even with no signal.
 
 ## Contents
 
@@ -204,6 +204,7 @@ The top of every screen shows **The Vault by RCbreezy ©** with today's date and
 | **📉 Loan Generator** | Add loans and generate their payment schedules. See [section 9](#9-loan-generator). |
 | **🔍 Search** | Find any bill, loan, or amount. See [section 10](#10-search). |
 | **🟢 Live sync** | Your account and sync status. See [section 3](#3-your-account--sync). |
+| **📄 Manual** | Downloads this User's Manual (PDF), on any screen. It works offline too. |
 | **🔄 Refresh** | Reloads the current screen with the latest numbers. |
 | **🔒 Log Out** | Locks the vault and returns to the profile screen. It also stops this profile from opening by itself next time. |
 
