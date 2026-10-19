@@ -1,11 +1,7 @@
 import { useState } from "react";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { SYNC_ONLY } from "./api";
 import { termsAccepted, acceptTerms } from "./preferences";
-
-// The online copy of the manual, for the desktop app (the web app serves its own copy, see vite.config.js)
-const MANUAL_URL = "https://thevault-rc.web.app/The-Vault-User-Manual.pdf";
-const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+import ManualLink from "./ManualLink";
 
 // Shown before signing in or unlocking: what The Vault is, how to start, the manual, and the Terms & Privacy Notice.
 // onTryDemo (web app only) opens a made-up vault without an account.
@@ -47,11 +43,7 @@ export default function Welcome({ onProceed, onTryDemo }) {
         </ol>
 
         <div style={{ marginTop: "20px" }}>
-          {inTauri ? (
-            <button onClick={() => openUrl(MANUAL_URL).catch(() => alert(`Open this link in your browser:\n${MANUAL_URL}`))} style={manualButton}>📄 Download the User's Manual (PDF)</button>
-          ) : (
-            <a href="/The-Vault-User-Manual.pdf" download="The-Vault-User-Manual.pdf" style={{ ...manualButton, display: "inline-block", textDecoration: "none" }}>📄 Download the User's Manual (PDF)</a>
-          )}
+          <ManualLink style={manualButton} />
         </div>
 
         <h3 style={h3}>Terms & Privacy Notice</h3>
