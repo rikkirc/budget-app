@@ -172,6 +172,7 @@ export default function Budget() {
 
     if (actionType === "PAY") {
         // Check if this is a Sinking Fund 2nd Half with a matching saved fund somewhere
+        let fromFund = false;
         if (bill.name.includes("(2nd Half (Due))") || bill.name.includes("(2nd Half)")) {
             const fundInfo = await invoke("get_sinking_fund_info", { billId: bill.id });
 
@@ -182,19 +183,8 @@ export default function Budget() {
                     `Click Cancel to just pay from your selected account as-is, leaving the sinking fund untouched.`
                 );
 
-                if (choice) {
-                    const transferResponse = await invoke("transfer_money", {
-                        fromAccountId: fundInfo.account_id,
-                        toAccountId: parseInt(fromAccountId),
-                        amount: fundInfo.amount,
-                        description: `Auto-Transfer: Sinking Fund for ${bill.name}`
-                    });
-
-                    if (transferResponse.startsWith("ERROR")) {
-                        alert(`Transfer failed: ${transferResponse}`);
-                        return; // Stop here, don't attempt the payment
-                    }
-                }
+                // The transfer from the fund and the payment happen together, so the receipt can undo both
+                fromFund = choice;
             }
         }
 
@@ -202,7 +192,8 @@ export default function Budget() {
             billId: bill.id,
             accountId: parseInt(fromAccountId),
             amount: bill.amount,
-            description: `Paid: ${bill.name}`
+            description: `Paid: ${bill.name}`,
+            fromFund
         });
         alert(response);
     } else if (actionType === "FUND") {
@@ -264,14 +255,17 @@ export default function Budget() {
   
   const handleUndoReceipt = async (receipt) => {
     const isFundTransfer = receipt.from_account_id && receipt.from_account_id !== 0;
+    const isSecondHalf = receipt.name.includes("(2nd Half");
     const confirmMsg = isFundTransfer
         ? `Undo this Sinking Fund transfer for "${displayBillName(receipt.name)}"? The money will move back to its original account.`
+        : isSecondHalf
+        ? `Undo this payment for "${displayBillName(receipt.name)}"? Only this payment is refunded. A 1st Half you saved to a fund stays saved, and any money brought over from that fund goes back to it.`
         : `Undo this payment for "${displayBillName(receipt.name)}"? The full amount will be refunded to the account it was paid from.`;
 
     if (window.confirm(confirmMsg)) {
         const response = isFundTransfer
             ? await invoke("undo_fund_to_savings", { paidBillId: receipt.id })
-            : await invoke("undo_bill_payment", { paidBillId: receipt.id });
+            : await invoke("undo_bill_payment", { paidBillId: receipt.id, keepSavedHalf: true });
         alert(response);
         loadData();
     }

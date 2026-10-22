@@ -406,6 +406,7 @@ Click **📅 Move**, then either pick an existing paycheck from the list or type
 Paid and funded bills appear under **Receipts (Paid & Settled Bills)**, newest first. Each shows its original due date and **✅ Settled** (or **✅ Saved to fund**) with the date and time it was handled. Receipts from before this was recorded show only the due date. Undoing a receipt:
 
 - **A payment** refunds the full amount to the account it came from, puts the bill back, restores a loan's balance (reopening it if that payment had completed it), and removes next month's TBD copy if it was created automatically.
+- **A Sinking Fund 2nd Half** refunds only that payment. If its 1st Half was saved to a fund, it stays saved (its **✅ Saved to fund** receipt is kept), and the money brought over from the fund goes back to the fund. If the 1st Half was never saved, the payment covered both halves, so both are put back.
 - **A Save to Fund** moves the money back from the savings account and puts the bill back. If some of the fund was already spent, Vault refuses and tells you how much is missing.
 
 ### Recycle Bin
