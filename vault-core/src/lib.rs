@@ -65,6 +65,9 @@ pub fn init_schema(conn: &Connection) {
     let _ = conn.execute("ALTER TABLE transactions ADD COLUMN created_at TEXT NOT NULL DEFAULT ''", []);
     // When each receipt was settled (paid or saved to a fund), stamped the same way; blank for receipts from before this was recorded
     let _ = conn.execute("ALTER TABLE paid_bills ADD COLUMN paid_at TEXT NOT NULL DEFAULT ''", []);
+    // A Sinking Fund 2nd Half paid "from the fund": the transfer (its TRANSFER_OUT entry) that brought the saved 1st Half
+    // over, so undoing the payment can send exactly that money back to the fund
+    let _ = conn.execute("ALTER TABLE paid_bills ADD COLUMN fund_transfer_id INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute_batch("CREATE TRIGGER IF NOT EXISTS set_paid_timestamp AFTER INSERT ON paid_bills WHEN NEW.paid_at = '' BEGIN UPDATE paid_bills SET paid_at = datetime('now','localtime') WHERE id = NEW.id; END;");
     let _ = conn.execute_batch("CREATE TRIGGER IF NOT EXISTS set_tx_timestamp AFTER INSERT ON transactions WHEN NEW.created_at = '' BEGIN UPDATE transactions SET created_at = datetime('now','localtime') WHERE id = NEW.id; END;");
 }
@@ -271,6 +274,12 @@ pub fn pay_bill(conn: &Connection, bill_id: i32, account_id: i32, amount: f64, d
         pay_bill_impl(&conn, bill_id, account_id, amount, description)
 }
 fn pay_bill_impl(conn: &Connection, bill_id: i32, account_id: i32, amount: f64, description: &str) -> String {
+    pay_bill_from(conn, bill_id, account_id, amount, description, false)
+}
+/// from_fund: for a Sinking Fund 2nd Half whose 1st Half was saved to a fund, first move that saved money from the fund
+/// into the paying account (in the same step, so a payment that can't go through moves nothing). Older changes in the
+/// shared list never set it, so they replay exactly as they were first applied.
+pub fn pay_bill_from(conn: &Connection, bill_id: i32, account_id: i32, amount: f64, description: &str, from_fund: bool) -> String {
     // 1. Get details of the bill being paid
     let mut stmt = conn.prepare("SELECT name, due_date, payday_date, loan_id, is_recurring, series_id FROM smart_bills WHERE id = ?1").unwrap();
     let mut rows = stmt.query(params![bill_id]).unwrap();
@@ -299,6 +308,12 @@ fn pay_bill_impl(conn: &Connection, bill_id: i32, account_id: i32, amount: f64, 
         // This is the REAL amount that should leave the account AND come off the loan balance
         let real_amount: f64 = round_to_centavo(if is_sinking_fund_second_half { amount * 2.0 } else { amount });
 
+        // The saved 1st Half to bring over from its fund first, if asked to (and if it isn't already in this account)
+        let fund = if from_fund && is_sinking_fund_second_half {
+            let info = get_sinking_fund_info_impl(conn, bill_id);
+            if info.found && info.account_id != account_id { Some((info.account_id, round_to_centavo(info.amount))) } else { None }
+        } else { None };
+
         // 🛡️ SAFETY CHECK: Does this account actually have enough for the REAL amount owed?
         let current_balance: f64 = conn.query_row(
             "SELECT balance FROM accounts WHERE id = ?1",
@@ -306,12 +321,27 @@ fn pay_bill_impl(conn: &Connection, bill_id: i32, account_id: i32, amount: f64, 
             |r| r.get(0)
         ).unwrap_or(0.0);
 
-        if current_balance < (real_amount - 0.01) {
+        if let Some((fund_id, fund_amount)) = fund {
+            let fund_balance: f64 = conn.query_row("SELECT balance FROM accounts WHERE id = ?1", params![fund_id], |r| r.get(0)).unwrap_or(0.0);
+            if fund_balance < (fund_amount - 0.01) {
+                return format!("ERROR: Insufficient funds! The sinking fund only has ₱{:.2}, but the saved 1st Half is ₱{:.2}.", fund_balance, fund_amount);
+            }
+            if current_balance + fund_amount < (real_amount - 0.01) {
+                return format!("ERROR: Insufficient funds! This account only has ₱{:.2} plus the ₱{:.2} from the sinking fund, but the full payment needs ₱{:.2}.", current_balance, fund_amount, real_amount);
+            }
+        } else if current_balance < (real_amount - 0.01) {
             return format!("ERROR: Insufficient funds! This account only has ₱{:.2}, but the full payment needs ₱{:.2}.", current_balance, real_amount);
         }
-        
+
+        // Bring the saved 1st Half over from the fund, as an ordinary transfer that shows in both accounts' history
+        let mut fund_transfer_id: i64 = 0;
+        if let Some((fund_id, fund_amount)) = fund {
+            transfer_money_impl(conn, fund_id, account_id, fund_amount, &format!("Auto-Transfer: Sinking Fund for {}", bill_name));
+            fund_transfer_id = conn.query_row("SELECT id FROM transactions WHERE account_id = ?1 AND tx_type = 'TRANSFER_OUT' ORDER BY id DESC LIMIT 1", params![fund_id], |r| r.get(0)).unwrap_or(0);
+        }
+
         // Move to paid bills (still logs the bill's own listed amount, for accurate receipts) — now also tagged with loan_id
-        let _ = conn.execute("INSERT INTO paid_bills (original_bill_id, name, amount, due_date, payday_date, account_id, loan_id, series_id, is_recurring) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)", params![bill_id, bill_name, amount, due, payday, account_id, bill_loan_id, series_id, is_recurring_int]);
+        let _ = conn.execute("INSERT INTO paid_bills (original_bill_id, name, amount, due_date, payday_date, account_id, loan_id, series_id, is_recurring, fund_transfer_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)", params![bill_id, bill_name, amount, due, payday, account_id, bill_loan_id, series_id, is_recurring_int, fund_transfer_id]);
         let _ = conn.execute("DELETE FROM smart_bills WHERE id = ?1", params![bill_id]);
 
         // 🔁 RECURRING BILL: automatically create next month's occurrence, amount reset to TBD (0)
@@ -383,7 +413,13 @@ pub fn undo_bill_payment(conn: &Connection, paid_bill_id: i32) -> String {
         undo_bill_payment_impl(&conn, paid_bill_id)
 }
 fn undo_bill_payment_impl(conn: &Connection, paid_bill_id: i32) -> String {
-    let mut stmt = conn.prepare("SELECT name, amount, due_date, payday_date, account_id, loan_id, series_id, is_recurring FROM paid_bills WHERE id = ?1").unwrap();
+    undo_bill_payment_keeping(conn, paid_bill_id, false)
+}
+/// keep_saved_half: undoing a Sinking Fund 2nd Half refunds only that payment. A 1st Half that was saved to a fund on its
+/// own stays saved (its receipt is kept), and the money brought over from the fund goes back to the fund. Without it, the
+/// 1st Half is reopened along with the 2nd, as before; older changes in the shared list replay that way.
+pub fn undo_bill_payment_keeping(conn: &Connection, paid_bill_id: i32, keep_saved_half: bool) -> String {
+    let mut stmt = conn.prepare("SELECT name, amount, due_date, payday_date, account_id, loan_id, series_id, is_recurring, fund_transfer_id FROM paid_bills WHERE id = ?1").unwrap();
     let mut rows = stmt.query(params![paid_bill_id]).unwrap();
 
     if let Some(row) = rows.next().unwrap() {
@@ -395,6 +431,7 @@ fn undo_bill_payment_impl(conn: &Connection, paid_bill_id: i32) -> String {
         let loan_id: i32 = row.get(5).unwrap_or(0);
         let series_id: i32 = row.get(6).unwrap_or(0);
         let is_recurring: i32 = row.get(7).unwrap_or(0);
+        let fund_transfer_id: i32 = row.get(8).unwrap_or(0);
 
         // Figure out if this was a Sinking Fund 2nd Half (meaning the REAL amount taken was double the listed amount)
         let due_structure: String = conn.query_row(
@@ -441,7 +478,25 @@ fn undo_bill_payment_impl(conn: &Connection, paid_bill_id: i32) -> String {
         let _ = conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id, series_id, is_recurring) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)", params![name, amount, due, payday, loan_id, series_id, is_recurring]);
 
         // 4. If it was a Sinking Fund 2nd Half, also restore the matching 1st Half that got auto-cleared
-        if is_sinking_fund_second_half {
+        if is_sinking_fund_second_half && keep_saved_half {
+            // Only a 1st Half that this payment cleared (paid together with it) reopens; one saved to a fund keeps its receipt
+            let _ = conn.execute(
+                "INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id, series_id, is_recurring)
+                 SELECT name, amount, due_date, payday_date, loan_id, series_id, is_recurring FROM paid_bills
+                 WHERE loan_id = ?1 AND series_id = ?3 AND name LIKE '%(1st Half)%' AND due_date = date(?2, '-15 days') AND from_account_id = 0
+                 ORDER BY id DESC LIMIT 1",
+                params![loan_id, due, series_id]
+            );
+            let _ = conn.execute(
+                "DELETE FROM paid_bills WHERE id = (SELECT id FROM paid_bills WHERE loan_id = ?1 AND series_id = ?3 AND name LIKE '%(1st Half)%' AND due_date = date(?2, '-15 days') AND from_account_id = 0 ORDER BY id DESC LIMIT 1)",
+                params![loan_id, due, series_id]
+            );
+            // Send the saved 1st Half back to its fund, by reversing the transfer that brought it over (unless that was already undone in Cash Flow)
+            let not_reversed: bool = conn.query_row("SELECT is_reversed = 0 FROM transactions WHERE id = ?1", params![fund_transfer_id], |r| r.get(0)).unwrap_or(false);
+            if fund_transfer_id != 0 && not_reversed {
+                undo_transaction(conn, fund_transfer_id);
+            }
+        } else if is_sinking_fund_second_half {
             let _ = conn.execute(
                 "INSERT INTO smart_bills (name, amount, due_date, payday_date, loan_id, series_id, is_recurring)
                  SELECT name, amount, due_date, payday_date, loan_id, series_id, is_recurring FROM paid_bills
@@ -864,8 +919,8 @@ pub fn dispatch(conn: &Connection, cmd: &str, args: &Value) -> Result<Value, Str
         "get_loans" => { to_json(get_loans(conn)) }
         "delete_loan" => { let loan_id: i32 = arg(args, "loanId")?; to_json(delete_loan(conn, loan_id)) }
         "fund_bill_to_savings" => { let bill_id: i32 = arg(args, "billId")?; let from_account_id: i32 = arg(args, "fromAccountId")?; let to_account_id: i32 = arg(args, "toAccountId")?; let amount: f64 = arg(args, "amount")?; let description: String = arg(args, "description")?; to_json(fund_bill_to_savings(conn, bill_id, from_account_id, to_account_id, amount, &description)) }
-        "pay_bill" => { let bill_id: i32 = arg(args, "billId")?; let account_id: i32 = arg(args, "accountId")?; let amount: f64 = arg(args, "amount")?; let description: String = arg(args, "description")?; to_json(pay_bill(conn, bill_id, account_id, amount, &description)) }
-        "undo_bill_payment" => { let paid_bill_id: i32 = arg(args, "paidBillId")?; to_json(undo_bill_payment(conn, paid_bill_id)) }
+        "pay_bill" => { let bill_id: i32 = arg(args, "billId")?; let account_id: i32 = arg(args, "accountId")?; let amount: f64 = arg(args, "amount")?; let description: String = arg(args, "description")?; let from_fund: Option<bool> = arg(args, "fromFund")?; to_json(pay_bill_from(conn, bill_id, account_id, amount, &description, from_fund.unwrap_or(false))) }
+        "undo_bill_payment" => { let paid_bill_id: i32 = arg(args, "paidBillId")?; let keep_saved_half: Option<bool> = arg(args, "keepSavedHalf")?; to_json(undo_bill_payment_keeping(conn, paid_bill_id, keep_saved_half.unwrap_or(false))) }
         "get_paid_bills" => { to_json(get_paid_bills(conn)) }
         "get_paid_bills_page" => { let offset: i32 = arg(args, "offset")?; let limit: i32 = arg(args, "limit")?; to_json(get_paid_bills_page(conn, offset, limit)) }
         "get_archived_loans" => { to_json(get_archived_loans(conn)) }
@@ -1347,6 +1402,137 @@ mod tests {
         let info = get_sinking_fund_info_impl(&conn, second);
         assert!(info.found);
         assert_eq!((info.account_id, info.amount), (savings, 1000.0));
+    }
+
+    // A Sinking Fund loan whose 1st Half (₱1,000) is saved to Savings from the Bank, then its 2nd Half paid from the Bank
+    fn saved_first_half(conn: &Connection) -> (i32, i32, i32) {
+        let bank = fund_account(conn, "Bank", 10000.0);
+        let savings = fund_account(conn, "Savings", 0.0);
+        add_loan_with_halves(conn, 4, "SLOAN", "Sinking Fund");
+        let first = bill_id_named(conn, "SLOAN (1st Half)", "2026-11-05");
+        fund_bill_to_savings_impl(conn, first, bank, savings, 1000.0, "Funded to Savings: SLOAN (1st Half)");
+        mark_first_half_handled(conn, first, "Savings");
+        let second = bill_id_named(conn, "SLOAN (2nd Half (Due))", "2026-11-20");
+        (bank, savings, second)
+    }
+
+    fn remaining_of(conn: &Connection, loan_id: i32) -> f64 {
+        conn.query_row("SELECT remaining_balance FROM loans WHERE id = ?1", params![loan_id], |r| r.get(0)).unwrap()
+    }
+
+    fn receipt_names(conn: &Connection) -> Vec<String> {
+        let mut names: Vec<String> = get_paid_bills(conn).into_iter().map(|b| b.name).collect();
+        names.sort();
+        names
+    }
+
+    fn receipt_id(conn: &Connection, name: &str) -> i32 {
+        conn.query_row("SELECT id FROM paid_bills WHERE name = ?1", params![name], |r| r.get(0)).unwrap()
+    }
+
+    #[test]
+    fn paying_a_second_half_from_the_fund_brings_the_saved_half_over_in_one_step() {
+        let conn = test_db();
+        let (bank, savings, second) = saved_first_half(&conn);
+        assert_eq!((balance_of(&conn, bank), balance_of(&conn, savings)), (9000.0, 1000.0));
+
+        assert!(pay_bill_from(&conn, second, bank, 1000.0, "Paid: SLOAN (2nd Half (Due))", true).starts_with("SUCCESS"));
+
+        // The fund's ₱1,000 moved to the Bank, then the full ₱2,000 installment left the Bank
+        assert_eq!((balance_of(&conn, bank), balance_of(&conn, savings)), (8000.0, 0.0));
+        assert_eq!(remaining_of(&conn, 4), 4000.0);
+        let transfers: i32 = conn.query_row("SELECT COUNT(*) FROM transactions WHERE description = 'Auto-Transfer: Sinking Fund for SLOAN (2nd Half (Due))'", [], |r| r.get(0)).unwrap();
+        assert_eq!(transfers, 2, "logged as a transfer in both accounts");
+    }
+
+    #[test]
+    fn paying_from_the_fund_moves_nothing_when_the_payment_cannot_go_through() {
+        let conn = test_db();
+        let (bank, savings, second) = saved_first_half(&conn);
+        conn.execute("UPDATE accounts SET balance = 500 WHERE id = ?1", params![bank]).unwrap();
+
+        // ₱500 + the fund's ₱1,000 is short of the ₱2,000 installment
+        assert!(pay_bill_from(&conn, second, bank, 1000.0, "Paid: SLOAN (2nd Half (Due))", true).contains("Insufficient"));
+        assert_eq!((balance_of(&conn, bank), balance_of(&conn, savings)), (500.0, 1000.0));
+        assert_eq!(remaining_of(&conn, 4), 6000.0);
+    }
+
+    #[test]
+    fn undoing_a_second_half_paid_from_the_fund_refunds_only_the_second_half() {
+        let conn = test_db();
+        let (bank, savings, second) = saved_first_half(&conn);
+        pay_bill_from(&conn, second, bank, 1000.0, "Paid: SLOAN (2nd Half (Due))", true);
+
+        let receipt = receipt_id(&conn, "SLOAN (2nd Half (Due))");
+        assert!(undo_bill_payment_keeping(&conn, receipt, true).starts_with("SUCCESS"));
+
+        // Back to just before the payment: the 2nd Half's ₱1,000 is refunded to the Bank and the saved ₱1,000 is back in its fund
+        assert_eq!((balance_of(&conn, bank), balance_of(&conn, savings)), (9000.0, 1000.0));
+        assert_eq!(remaining_of(&conn, 4), 6000.0);
+        // The 1st Half stays saved; only the 2nd Half is open again
+        assert_eq!(receipt_names(&conn), vec!["SLOAN (1st Half) (Handled in Savings)".to_string()]);
+        let open: Vec<String> = unpaid_bills(&conn).into_iter().map(|b| b.1).collect();
+        assert_eq!(open, vec!["SLOAN (2nd Half (Due))".to_string()]);
+        // The auto-transfer shows as undone in Cash Flow, so it can't be undone a second time there
+        let reversed: i32 = conn.query_row("SELECT COUNT(*) FROM transactions WHERE description LIKE 'Auto-Transfer:%' AND is_reversed = 1", [], |r| r.get(0)).unwrap();
+        assert_eq!(reversed, 2);
+
+        // And it can be paid again, the same way
+        let second = bill_id_named(&conn, "SLOAN (2nd Half (Due))", "2026-11-20");
+        assert!(pay_bill_from(&conn, second, bank, 1000.0, "Paid: SLOAN (2nd Half (Due))", true).starts_with("SUCCESS"));
+        assert_eq!((balance_of(&conn, bank), balance_of(&conn, savings)), (8000.0, 0.0));
+    }
+
+    #[test]
+    fn undoing_a_second_half_paid_without_the_fund_leaves_the_fund_alone() {
+        let conn = test_db();
+        let (bank, savings, second) = saved_first_half(&conn);
+        // "Cancel" at the prompt: the whole ₱2,000 comes from the Bank and the fund keeps its ₱1,000
+        pay_bill_from(&conn, second, bank, 1000.0, "Paid: SLOAN (2nd Half (Due))", false);
+        assert_eq!((balance_of(&conn, bank), balance_of(&conn, savings)), (7000.0, 1000.0));
+
+        undo_bill_payment_keeping(&conn, receipt_id(&conn, "SLOAN (2nd Half (Due))"), true);
+
+        assert_eq!((balance_of(&conn, bank), balance_of(&conn, savings)), (9000.0, 1000.0));
+        assert_eq!(receipt_names(&conn), vec!["SLOAN (1st Half) (Handled in Savings)".to_string()]);
+        assert_eq!(remaining_of(&conn, 4), 6000.0);
+    }
+
+    #[test]
+    fn undoing_a_second_half_that_also_paid_an_unsaved_first_half_reopens_both() {
+        let conn = test_db();
+        let bank = fund_account(&conn, "Bank", 10000.0);
+        add_loan_with_halves(&conn, 4, "SLOAN", "Sinking Fund");
+        // The 1st Half was never saved, so paying the 2nd Half pays the whole ₱2,000 installment and clears both
+        let second = bill_id_named(&conn, "SLOAN (2nd Half (Due))", "2026-11-20");
+        pay_bill_from(&conn, second, bank, 1000.0, "Paid: SLOAN (2nd Half (Due))", true);
+        assert_eq!(balance_of(&conn, bank), 8000.0);
+        assert_eq!(receipt_names(&conn).len(), 2);
+
+        undo_bill_payment_keeping(&conn, receipt_id(&conn, "SLOAN (2nd Half (Due))"), true);
+
+        assert_eq!(balance_of(&conn, bank), 10000.0);
+        assert!(receipt_names(&conn).is_empty());
+        let open: Vec<String> = unpaid_bills(&conn).into_iter().map(|b| b.1).collect();
+        assert_eq!(open, vec!["SLOAN (1st Half)".to_string(), "SLOAN (2nd Half (Due))".to_string()]);
+    }
+
+    #[test]
+    fn changes_recorded_before_the_fix_still_replay_the_old_way() {
+        // Synced devices replay old changes from the shared list; without the new arguments they must give the same
+        // result they gave when first applied, or two devices would disagree
+        let conn = test_db();
+        let (bank, savings, second) = saved_first_half(&conn);
+        let first_dispatch = |cmd: &str, args: serde_json::Value| dispatch(&conn, cmd, &args).unwrap();
+        first_dispatch("transfer_money", serde_json::json!({ "fromAccountId": savings, "toAccountId": bank, "amount": 1000.0, "description": "Auto-Transfer: Sinking Fund for SLOAN (2nd Half (Due))" }));
+        first_dispatch("pay_bill", serde_json::json!({ "billId": second, "accountId": bank, "amount": 1000.0, "description": "Paid: SLOAN (2nd Half (Due))" }));
+        let receipt = receipt_id(&conn, "SLOAN (2nd Half (Due))");
+        first_dispatch("undo_bill_payment", serde_json::json!({ "paidBillId": receipt }));
+
+        // The old way: the full ₱2,000 back to the Bank, and the 1st Half reopened
+        assert_eq!((balance_of(&conn, bank), balance_of(&conn, savings)), (10000.0, 0.0));
+        assert!(receipt_names(&conn).is_empty());
+        assert_eq!(unpaid_bills(&conn).len(), 2);
     }
 
     // ---- Editing ----
