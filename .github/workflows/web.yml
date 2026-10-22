@@ -66,6 +66,10 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           projectId: the-vault-1399a
           channelId: live
+          # Pinned: 15.34.1 first checks that Hosting is switched on (serviceusage.services.get), which the deploy key
+          # isn't allowed to do, so every publish failed. Raise this only after giving the key the Service Usage
+          # Consumer role.
+          firebaseToolsVersion: 15.34.0
       - name: Publishing skipped
         if: env.HAS_DEPLOY_KEY != 'true'
         run: echo "::notice::The web app was built but not published. Add the FIREBASE_SERVICE_ACCOUNT secret to publish it (see docs/SYNC_AND_MOBILE.md)."
