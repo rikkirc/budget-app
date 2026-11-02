@@ -14,6 +14,10 @@ use std::path::Path;
 #[derive(Serialize)] pub struct PaidBill { pub id: i32, pub original_bill_id: i32, pub name: String, pub amount: f64, pub due_date: String, pub payday_date: String, pub account_id: i32, pub from_account_id: i32, pub loan_id: i32, pub paid_at: String }
 #[derive(Serialize)] pub struct CompletedLoan { pub id: i32, pub original_id: i32, pub name: String, pub principal: f64, pub term: i32, pub term_type: String, pub frequency: String, pub payment_amount: f64, pub total_incurred: f64, pub completed_date: String }
 #[derive(Serialize)] pub struct SinkingFundInfo { pub found: bool, pub account_id: i32, pub account_name: String, pub amount: f64 }
+/// Where an unpaid 2nd Half's 1st Half stands. state: "open" (still to pay or save; id is its bill), "saved" (saved to a
+/// fund; id is its receipt, account the fund), "paid" (paid on its own; id is its receipt, account the one it was paid
+/// from) or "missing" (none matches, for example it was deleted).
+#[derive(Serialize)] pub struct FirstHalfStatus { pub second_half_id: i32, pub state: String, pub id: i32, pub due_date: String, pub payday_date: String, pub account_name: String, pub settled_at: String }
 #[derive(Serialize)] pub struct ArchivedBill { pub id: i32, pub original_id: i32, pub name: String, pub amount: f64, pub due_date: String, pub payday_date: String }
 
 /// Turns "John Doe" into "john_doe_finance_data.db", the same file name every version of the app has used
@@ -536,6 +540,30 @@ pub fn undo_delete_loan(conn: &Connection, archive_id: i32, bill_names: Vec<Stri
 pub fn delete_bill(conn: &Connection, bill_id: i32) -> String { let mut stmt = conn.prepare("SELECT name, amount, due_date, payday_date, series_id, is_recurring FROM smart_bills WHERE id = ?1").unwrap(); let mut rows = stmt.query(params![bill_id]).unwrap(); if let Some(row) = rows.next().unwrap() { let name: String = row.get(0).unwrap(); let amount: f64 = row.get(1).unwrap(); let due: String = row.get(2).unwrap(); let payday: String = row.get(3).unwrap(); let series_id: i32 = row.get(4).unwrap_or(0); let is_recurring: i32 = row.get(5).unwrap_or(0); let _ = conn.execute("INSERT INTO archived_smart_bills (original_id, name, amount, due_date, payday_date, series_id, is_recurring) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)", params![bill_id, name, amount, due, payday, series_id, is_recurring]); } let _ = conn.execute("DELETE FROM smart_bills WHERE id = ?1", params![bill_id]); "SUCCESS: Bill moved to Recycle Bin!".to_string() }
 pub fn get_archived_bills(conn: &Connection) -> Vec<ArchivedBill> { let mut stmt = conn.prepare("SELECT id, original_id, name, amount, due_date, payday_date FROM archived_smart_bills ORDER BY id DESC").unwrap(); let iter = stmt.query_map([], |row| { Ok(ArchivedBill { id: row.get(0).unwrap_or(0), original_id: row.get(1).unwrap_or(0), name: row.get(2).unwrap_or_else(|_| "".to_string()), amount: row.get(3).unwrap_or(0.0), due_date: row.get(4).unwrap_or_else(|_| "".to_string()), payday_date: row.get(5).unwrap_or_else(|_| "".to_string()) }) }).unwrap(); let mut archived = Vec::new(); for b in iter { if let Ok(item) = b { archived.push(item); } } archived }
 pub fn undo_delete_bill(conn: &Connection, archive_id: i32) -> String { let mut stmt = conn.prepare("SELECT name, amount, due_date, payday_date, series_id, is_recurring FROM archived_smart_bills WHERE id = ?1").unwrap(); let mut rows = stmt.query(params![archive_id]).unwrap(); if let Some(row) = rows.next().unwrap() { let name: String = row.get(0).unwrap(); let amount: f64 = row.get(1).unwrap(); let due: String = row.get(2).unwrap(); let payday: String = row.get(3).unwrap(); let series_id: i32 = row.get(4).unwrap_or(0); let is_recurring: i32 = row.get(5).unwrap_or(0); let _ = conn.execute("INSERT INTO smart_bills (name, amount, due_date, payday_date, series_id, is_recurring) VALUES (?1, ?2, ?3, ?4, ?5, ?6)", params![name, amount, due, payday, series_id, is_recurring]); let _ = conn.execute("DELETE FROM archived_smart_bills WHERE id = ?1", params![archive_id]); } "SUCCESS: Bill restored to Budget!".to_string() }
+/// The 1st Half of every unpaid 2nd Half, found the way payments find it: same loan or split series, due 15 days earlier
+pub fn get_first_halves(conn: &Connection) -> Vec<FirstHalfStatus> {
+    let mut stmt = conn.prepare("SELECT id, due_date, loan_id, series_id FROM smart_bills WHERE name LIKE '%(2nd Half%' ORDER BY id").unwrap();
+    let seconds: Vec<(i32, String, i32, i32)> = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))).unwrap().filter_map(|r| r.ok()).collect();
+    seconds.into_iter().map(|(second_half_id, due, loan_id, series_id)| {
+        let open = conn.query_row(
+            "SELECT id, due_date, payday_date FROM smart_bills WHERE loan_id = ?1 AND series_id = ?2 AND name LIKE '%(1st Half)%' AND due_date = date(?3, '-15 days') ORDER BY id LIMIT 1",
+            params![loan_id, series_id, due],
+            |r| Ok(FirstHalfStatus { second_half_id, state: "open".to_string(), id: r.get(0)?, due_date: r.get(1)?, payday_date: r.get(2)?, account_name: String::new(), settled_at: String::new() }),
+        );
+        if let Ok(status) = open { return status; }
+        let settled = conn.query_row(
+            "SELECT pb.id, pb.due_date, pb.payday_date, COALESCE(a.name, ''), pb.paid_at, pb.from_account_id FROM paid_bills pb LEFT JOIN accounts a ON a.id = pb.account_id
+             WHERE pb.loan_id = ?1 AND pb.series_id = ?2 AND pb.name LIKE '%(1st Half)%' AND pb.due_date = date(?3, '-15 days') ORDER BY pb.id DESC LIMIT 1",
+            params![loan_id, series_id, due],
+            |r| {
+                let from_account_id: i32 = r.get(5)?;
+                Ok(FirstHalfStatus { second_half_id, state: if from_account_id != 0 { "saved" } else { "paid" }.to_string(), id: r.get(0)?, due_date: r.get(1)?, payday_date: r.get(2)?, account_name: r.get(3)?, settled_at: r.get(4)? })
+            },
+        );
+        settled.unwrap_or(FirstHalfStatus { second_half_id, state: "missing".to_string(), id: 0, due_date: String::new(), payday_date: String::new(), account_name: String::new(), settled_at: String::new() })
+    }).collect()
+}
+
 pub fn get_sinking_fund_info(conn: &Connection, bill_id: i32) -> SinkingFundInfo {
         get_sinking_fund_info_impl(&conn, bill_id)
 }
@@ -772,7 +800,7 @@ pub fn edit_loan(conn: &Connection, loan_id: i32, name: &str, date_acquired: &st
 // ---------------------------------------------------------------------------------------------------------------------
 
 /// Every command the frontend may call, in the order the dispatcher checks them
-pub const COMMANDS: &[&str] = &["add_account", "get_accounts", "delete_account", "log_income", "log_expense", "transfer_money", "undo_transaction", "get_all_transactions", "get_transactions_page", "add_smart_bill", "update_bill_amount", "split_recurring_bill", "move_bill_allocation", "get_smart_bills", "add_loan", "get_loans", "delete_loan", "fund_bill_to_savings", "pay_bill", "undo_bill_payment", "get_paid_bills", "get_paid_bills_page", "get_archived_loans", "get_completed_loans", "undo_delete_loan", "delete_bill", "get_archived_bills", "undo_delete_bill", "get_sinking_fund_info", "repair_balance_rounding", "repair_loan_ids", "undo_fund_to_savings", "mark_first_half_handled", "rename_account", "edit_bill", "edit_loan"];
+pub const COMMANDS: &[&str] = &["add_account", "get_accounts", "delete_account", "log_income", "log_expense", "transfer_money", "undo_transaction", "get_all_transactions", "get_transactions_page", "add_smart_bill", "update_bill_amount", "split_recurring_bill", "move_bill_allocation", "get_smart_bills", "add_loan", "get_loans", "delete_loan", "fund_bill_to_savings", "pay_bill", "undo_bill_payment", "get_paid_bills", "get_paid_bills_page", "get_archived_loans", "get_completed_loans", "undo_delete_loan", "delete_bill", "get_archived_bills", "undo_delete_bill", "get_first_halves", "get_sinking_fund_info", "repair_balance_rounding", "repair_loan_ids", "undo_fund_to_savings", "mark_first_half_handled", "rename_account", "edit_bill", "edit_loan"];
 
 /// Reads never change the vault, so the sync server only notifies other devices after anything else
 pub fn is_mutation(cmd: &str) -> bool { !cmd.starts_with("get_") }
@@ -929,6 +957,7 @@ pub fn dispatch(conn: &Connection, cmd: &str, args: &Value) -> Result<Value, Str
         "delete_bill" => { let bill_id: i32 = arg(args, "billId")?; to_json(delete_bill(conn, bill_id)) }
         "get_archived_bills" => { to_json(get_archived_bills(conn)) }
         "undo_delete_bill" => { let archive_id: i32 = arg(args, "archiveId")?; to_json(undo_delete_bill(conn, archive_id)) }
+        "get_first_halves" => { to_json(get_first_halves(conn)) }
         "get_sinking_fund_info" => { let bill_id: i32 = arg(args, "billId")?; to_json(get_sinking_fund_info(conn, bill_id)) }
         "repair_balance_rounding" => { to_json(repair_balance_rounding(conn)) }
         "repair_loan_ids" => { to_json(repair_loan_ids(conn)) }
@@ -1428,6 +1457,72 @@ mod tests {
 
     fn receipt_id(conn: &Connection, name: &str) -> i32 {
         conn.query_row("SELECT id FROM paid_bills WHERE name = ?1", params![name], |r| r.get(0)).unwrap()
+    }
+
+    fn first_half_of(conn: &Connection, second: i32) -> FirstHalfStatus {
+        get_first_halves(conn).into_iter().find(|s| s.second_half_id == second).expect("every unpaid 2nd Half is listed")
+    }
+
+    #[test]
+    fn a_second_halfs_first_half_shows_as_open_until_it_is_settled() {
+        let conn = test_db();
+        add_loan_with_halves(&conn, 4, "SLOAN", "Sinking Fund");
+        let first = bill_id_named(&conn, "SLOAN (1st Half)", "2026-11-05");
+        let second = bill_id_named(&conn, "SLOAN (2nd Half (Due))", "2026-11-20");
+
+        let status = first_half_of(&conn, second);
+        assert_eq!((status.state.as_str(), status.id), ("open", first));
+        assert_eq!((status.due_date.as_str(), status.payday_date.as_str()), ("2026-11-05", "2026-10-15"));
+        assert_eq!(get_first_halves(&conn).len(), 1, "only 2nd Halves are listed");
+    }
+
+    #[test]
+    fn a_first_half_saved_to_a_fund_shows_the_fund_and_when() {
+        let conn = test_db();
+        let (_bank, _savings, second) = saved_first_half(&conn);
+        let status = first_half_of(&conn, second);
+        assert_eq!(status.state, "saved");
+        assert_eq!(status.account_name, "Savings");
+        assert_eq!(status.id, receipt_id(&conn, "SLOAN (1st Half) (Handled in Savings)"));
+        assert_eq!(status.settled_at.len(), 19, "the date and time it was saved: {}", status.settled_at);
+    }
+
+    #[test]
+    fn a_true_bimonthly_first_half_paid_on_its_own_shows_the_account_it_was_paid_from() {
+        let conn = test_db();
+        let bank = fund_account(&conn, "Bank", 10000.0);
+        add_loan_with_halves(&conn, 3, "BILLEASE", "True Bi-Monthly");
+        let first = bill_id_named(&conn, "BILLEASE (1st Half)", "2026-11-05");
+        pay_bill_impl(&conn, first, bank, 1000.0, "Paid: BILLEASE (1st Half)");
+
+        let second = bill_id_named(&conn, "BILLEASE (2nd Half (Due))", "2026-11-20");
+        let status = first_half_of(&conn, second);
+        assert_eq!((status.state.as_str(), status.account_name.as_str()), ("paid", "Bank"));
+    }
+
+    #[test]
+    fn a_deleted_first_half_shows_as_missing_and_other_loans_never_match() {
+        let conn = test_db();
+        add_loan_with_halves(&conn, 4, "SLOAN", "Sinking Fund");
+        add_loan_with_halves(&conn, 5, "OTHER", "Sinking Fund");
+        delete_bill(&conn, bill_id_named(&conn, "SLOAN (1st Half)", "2026-11-05"));
+
+        // OTHER has a 1st Half due the same day, but it belongs to another loan
+        let status = first_half_of(&conn, bill_id_named(&conn, "SLOAN (2nd Half (Due))", "2026-11-20"));
+        assert_eq!((status.state.as_str(), status.id), ("missing", 0));
+        assert_eq!(first_half_of(&conn, bill_id_named(&conn, "OTHER (2nd Half (Due))", "2026-11-20")).state, "open");
+    }
+
+    #[test]
+    fn a_split_bills_halves_are_matched_by_their_series() {
+        let conn = test_db();
+        let result = add_smart_bill_impl(&conn, "Rent", 6000.0, "2026-11-30", "2026-11-15", true, true);
+        assert!(result.starts_with("SUCCESS"), "{}", result);
+        let halves = unpaid_bills(&conn);
+        let first = halves.iter().find(|b| b.1.contains("(1st Half)")).unwrap().0;
+        let second = halves.iter().find(|b| b.1.contains("(2nd Half")).unwrap().0;
+        let status = first_half_of(&conn, second);
+        assert_eq!((status.state.as_str(), status.id), ("open", first));
     }
 
     #[test]

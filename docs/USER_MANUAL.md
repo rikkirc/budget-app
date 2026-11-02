@@ -350,6 +350,11 @@ Click **Save Bill**. Vault confirms which paycheck the bill is on, and rejects d
 
 Each tab, such as **💼 October 31, 2026 BILLS**, holds the bills allocated to that paycheck, nearest due date first. **Total Tab Due** at the top is how much that paycheck needs to cover.
 
+Every **2nd Half (Due)** shows where its 1st Half stands:
+
+- **Red:** the 1st Half isn't settled yet. The bill says when the 1st Half is due and on which paycheck. Click **↗ Go to 1st Half** to jump to it on its own tab.
+- **Green:** the 1st Half is settled. The bill says the account it was saved to (or paid from) and the date and time. Click **↗ View 1st Half receipt** to jump to its receipt.
+
 ### The controls on each bill
 
 | Control | What it does |
