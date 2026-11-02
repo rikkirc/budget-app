@@ -34,6 +34,10 @@ export default function Budget() {
   const [revealedReceiptIds, setRevealedReceiptIds] = useState(new Set());
   const [receiptOffset, setReceiptOffset] = useState(0);
   const [hasMoreReceipts, setHasMoreReceipts] = useState(true);
+  // Each unpaid 2nd Half's 1st Half (open, saved, paid or missing), by the 2nd Half's id
+  const [firstHalves, setFirstHalves] = useState({});
+  // A bill or receipt just jumped to from its 2nd Half: { kind: "bill" | "receipt", id }, flashed briefly
+  const [highlight, setHighlight] = useState(null);
   const RECEIPT_PAGE_SIZE = 50;
   
 
@@ -43,6 +47,7 @@ export default function Budget() {
 
   const loadData = async () => {
     setBills(await invoke("get_smart_bills"));
+    try { setFirstHalves(Object.fromEntries((await invoke("get_first_halves")).map(s => [s.second_half_id, s]))); } catch (e) { setFirstHalves({}); }
     setAccounts(await invoke("get_accounts"));
     try {
       const receipts = await invoke("get_paid_bills_page", { offset: 0, limit: RECEIPT_PAGE_SIZE });
@@ -52,6 +57,34 @@ export default function Budget() {
     } catch (e) { console.log("No paid bills found."); }
     try { setArchivedBills(await invoke("get_archived_bills")); } catch (e) { console.log("No archived bills found."); }
     try { setLoans(await invoke("get_loans")); } catch (e) { console.log("No loans found."); }
+  };
+
+  // Bring the jumped-to bill or receipt into view, then let the highlight fade
+  useEffect(() => {
+    if (!highlight) return;
+    document.getElementById(`${highlight.kind}-${highlight.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const timer = setTimeout(() => setHighlight(null), 2500);
+    return () => clearTimeout(timer);
+  }, [highlight]);
+
+  // From a 2nd Half to its 1st Half: its paycheck tab while it's unpaid, or its receipt once it's settled
+  const goToFirstHalf = async (status) => {
+    if (status.state === "open") {
+      setActiveTab(status.payday_date);
+      setActiveBillId(null); setMovingBillId(null); setEditingBillId(null);
+      setHighlight({ kind: "bill", id: status.id });
+      return;
+    }
+    // Receipts load a page at a time: load more until the 1st Half's receipt is on screen
+    let list = paidBills, offset = receiptOffset, more = hasMoreReceipts;
+    while (!list.some(r => r.id === status.id) && more) {
+      const page = await invoke("get_paid_bills_page", { offset, limit: RECEIPT_PAGE_SIZE });
+      list = [...list, ...page];
+      offset += page.length;
+      more = page.length === RECEIPT_PAGE_SIZE;
+    }
+    if (list !== paidBills) { setPaidBills(list); setReceiptOffset(offset); setHasMoreReceipts(more); }
+    setHighlight({ kind: "receipt", id: status.id });
   };
 
   const loadMoreReceipts = async () => {
@@ -395,12 +428,32 @@ export default function Budget() {
                         Total Tab Due: ₱{groupedBills[currentTab].reduce((sum, b) => sum + b.amount, 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
 
-                    {groupedBills[currentTab].map(bill => (
-                        <div key={bill.id} style={{ padding: "15px", backgroundColor: "#f3f4f6", borderRadius: "8px", border: "1px solid #d1d5db" }}>
+                    {groupedBills[currentTab].map(bill => {
+                        // A 2nd Half is red until its 1st Half is settled, green once it is
+                        const firstHalf = firstHalves[bill.id];
+                        const settled = firstHalf && (firstHalf.state === "saved" || firstHalf.state === "paid");
+                        const halfStyle = !firstHalf || firstHalf.state === "missing" ? {}
+                          : settled ? { backgroundColor: "#ecfdf5", border: "1px solid #6ee7b7", borderLeft: "5px solid #059669" }
+                          : { backgroundColor: "#fef2f2", border: "1px solid #fca5a5", borderLeft: "5px solid #dc2626" };
+                        const flash = highlight?.kind === "bill" && highlight.id === bill.id ? { outline: "3px solid #f59e0b", boxShadow: "0 0 0 6px rgba(245, 158, 11, 0.25)" } : {};
+                        return (
+                        <div key={bill.id} id={`bill-${bill.id}`} className={firstHalf ? `second-half ${settled ? "first-half-settled" : firstHalf.state === "open" ? "first-half-open" : "first-half-missing"}` : undefined} style={{ padding: "15px", backgroundColor: "#f3f4f6", borderRadius: "8px", border: "1px solid #d1d5db", transition: "outline 0.3s, box-shadow 0.3s", ...halfStyle, ...flash }}>
                             <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", justifyContent: "space-between", alignItems: "center", marginBottom: activeBillId === bill.id || movingBillId === bill.id || editingBillId === bill.id ? "15px" : "0" }}>
                                 <div style={{ flex: "1 1 180px", minWidth: 0 }}>
                                     <div style={{ fontWeight: "bold", color: "#374151", fontSize: "16px" }}>{displayBillName(bill.name)}</div>
                                     <div style={{ color: "#dc2626", fontSize: "14px", marginTop: "5px" }}>Target Due Date: {formatDate(bill.due_date).replace(" BILLS", "")}</div>
+                                    {firstHalf && (
+                                        <div style={{ fontSize: "13px", marginTop: "6px", color: settled ? "#047857" : firstHalf.state === "open" ? "#b91c1c" : "#6b7280" }}>
+                                            {firstHalf.state === "open" && <>⏳ 1st Half not settled yet: due {formatReceiptDate(firstHalf.due_date)}, on the {formatDate(firstHalf.payday_date).replace(" BILLS", "")} paycheck</>}
+                                            {settled && <>✅ 1st Half settled: {firstHalf.state === "saved" ? "saved to" : "paid from"} <b>{firstHalf.account_name || "an account"}</b>{firstHalf.settled_at ? <> on {formatSettled(firstHalf.settled_at)}</> : null}</>}
+                                            {firstHalf.state === "missing" && <>1st Half not found (it may have been deleted)</>}
+                                            {firstHalf.state !== "missing" && (
+                                                <button onClick={() => goToFirstHalf(firstHalf)} style={{ marginLeft: "8px", padding: 0, background: "none", border: "none", color: "#2563eb", textDecoration: "underline", cursor: "pointer", fontSize: "13px", fontWeight: "bold" }}>
+                                                    {firstHalf.state === "open" ? "↗ Go to 1st Half" : "↗ View 1st Half receipt"}
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                                 <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end", gap: "10px", marginLeft: "auto" }}>
                                     {editingAmountId === bill.id ? (
@@ -546,7 +599,8 @@ export default function Budget() {
                                 </div>
                             )}
                         </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
           </div>
@@ -564,7 +618,7 @@ export default function Budget() {
                     const isRecent = index < 3;
                     const isRevealed = revealedReceiptIds.has(receipt.id);
                     return (
-                        <div key={index} style={{ padding: "12px 15px", backgroundColor: "#f3f4f6", borderRadius: "6px", borderLeft: "4px solid #10b981", display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "space-between", alignItems: "center" }}>
+                        <div key={index} id={`receipt-${receipt.id}`} style={{ padding: "12px 15px", backgroundColor: "#f3f4f6", borderRadius: "6px", borderLeft: "4px solid #10b981", display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "space-between", alignItems: "center", transition: "outline 0.3s, box-shadow 0.3s", ...(highlight?.kind === "receipt" && highlight.id === receipt.id ? { outline: "3px solid #f59e0b", boxShadow: "0 0 0 6px rgba(245, 158, 11, 0.25)" } : {}) }}>
                             <div style={{ minWidth: 0 }}>
                                 <div style={{ fontWeight: "bold", color: "#1f2937" }}>{displayBillName(receipt.name)}</div>
                                 <div style={{ color: "#6b7280", fontSize: "13px" }}>Original Due: {formatReceiptDate(receipt.due_date)}</div>
